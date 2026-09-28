@@ -348,3 +348,22 @@ Destination search is an external integration and must not couple the frontend
 to provider payloads or expose credentials. A bounded explicit search action is
 sufficient for the current navigation shell without adding autocomplete
 traffic or a second geocoding abstraction.
+
+---
+
+## ADR-022: Backend-owned integration orchestration
+
+Decision:
+
+Keep the end-to-end demo orchestration in the existing frontend shell while
+delegating destination resolution, route acquisition, incident corridor
+collection, SafetyEngine assessment, and route comparison to their existing
+backend boundaries. Changing a selected route mode requests a new backend
+comparison; no route cost or safety score is calculated in TypeScript.
+
+Reason:
+
+This connects the completed vertical slices for demonstration without creating
+a second safety model or coupling the browser to providers. Independent
+heatmap and incident-panel failures remain visible without preventing route
+requests.

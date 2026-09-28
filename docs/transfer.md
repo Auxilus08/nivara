@@ -39,9 +39,12 @@ PostGIS database is configured in this environment.
 - T035 Confidence model
 - T036 Incident filtering
 - T037 Incident UI
+- T100 Navigation integration
 
-The navigation foundation now accepts a selected geocoded destination; route
-comparison and safety enrichment remain unchanged.
+The primary demonstration flow now connects browser location, destination
+search/selection, backend route comparison, contextual heatmap indicators, and
+the independent incident panel. Route mode changes recalculate through the
+backend; no safety calculation was moved into the frontend.
 
 ## Navigation Architecture
 
@@ -70,8 +73,8 @@ Frontend:
 - `frontend/app/page.tsx` provides the minimum navigation shell: map surface
   placeholder, browser geolocation, destination search/selection, route
   mode selection, loading/error states, and normalized route result rendering.
-- Destination search is intentionally not implemented; the geocoding protocol
-  remains available for a future provider adapter.
+- Destination search is implemented through the provider-neutral geocoding
+  client and selected coordinates are passed to the existing route client.
 - `backend/app/api/routes/safety.py` exposes the bounded
   `GET /api/v1/safety/heatmap` endpoint. It requires a 0.02–2 degree viewport
   and accepts a 2–12 by 2–12 coarse grid.
@@ -96,6 +99,19 @@ Frontend:
   comparison or heatmap behavior. Exact coordinates are used only for the
   existing API contract; displayed locations are rounded to approximate
   coordinates and reporter identity is never requested or shown.
+
+## End-to-End Integration
+
+- `frontend/app/page.tsx` keeps location, destination selection, route mode,
+  route loading/error state, selected-route summary, heatmap state, and the
+  incident panel in one demo flow.
+- Changing FASTEST, BALANCED, or SAFETY_PRIORITY after a destination and
+  current location are selected requests a fresh comparison from
+  `POST /api/v1/routes`; the frontend does not calculate costs or risk.
+- Destination changes clear stale route results. Route loading disables mode
+  and destination controls to avoid contradictory results.
+- Heatmap and incident errors remain isolated from route errors, so one
+  unavailable service does not hide the other contextual UI.
 
 ## Destination Search
 
@@ -195,7 +211,7 @@ contextual incident activity, not a prediction or guarantee of safety.
 ## Verification Performed
 
 - `python3 -m pip install -e '.[test]' --user` from `backend/` — passed
-- `pytest -q` from `backend/` — passed, 76 tests
+- `pytest -q` from `backend/` — passed, 89 tests
 - `python -m compileall backend/app` — passed
 - `git diff --check` — passed
 - `pnpm typecheck` from `frontend/` — passed
@@ -208,9 +224,7 @@ integration was run or claimed because no credential was configured.
 
 - No live routing credential is configured in this environment.
 - No live PostgreSQL/PostGIS integration verification was performed.
-- No live map tiles or external geocoding/search.
-- Destination entry currently accepts latitude/longitude rather than place
-  search.
+- No live map tiles or external geocoding/search request was performed.
 - Provider route modes are validated and carried through the contract; route
   comparison applies the Nivara time/safety objective after provider results
   are normalized.
@@ -228,6 +242,6 @@ integration was run or claimed because no credential was configured.
 
 ## Exact Next Task
 
-T100 — Integrate navigation, incident-derived safety context, and destination
-search into an end-to-end demonstration flow without introducing new provider
-coupling.
+T101 — Validate the safety-engine integration end-to-end with configured
+incident data and route requests, without changing the deterministic scoring
+contract.

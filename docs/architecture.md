@@ -273,6 +273,12 @@ Fastest / Balanced / Safety Priority
     ->
 User
 
+The frontend integration keeps the selected destination coordinate as the
+single handoff between geocoding and routing. Mode changes re-request the
+backend route comparison when location and destination are available. Route
+results, heatmap indicators, and incident browsing remain separate API-backed
+views; the frontend does not calculate safety scores or route costs.
+
 Destination search follows a separate provider-neutral boundary:
 
 Frontend
