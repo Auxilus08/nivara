@@ -99,6 +99,19 @@ travel time using weights of `time=0.90` and `safety=0.10`. Available
 discard contextual incident indicators. This is a user-selected travel-time
 objective, not a guarantee that the route is objectively fastest or safest.
 
+For `mode: "balanced"`, the configured objective uses `time=0.55` and
+`safety=0.45`. It combines normalized travel time with the existing
+SafetyEngine risk score, so neither a lower-risk candidate nor a faster
+candidate automatically wins in every case. The mode balances available
+travel-time and safety indicators; it does not identify a safe or objectively
+best route.
+
+For `mode: "safety_priority"`, the configured objective uses `time=0.25` and
+`safety=0.75`. It places greater weight on available safety indicators than
+travel time while still retaining a travel-time component. The result is a
+lower-estimated-risk objective based on available incident data, not a safe,
+dangerous, or guaranteed-protection route claim.
+
 ---
 
 GET /routes/{route_id}
@@ -123,7 +136,47 @@ GET /safety/heatmap
 
 Purpose:
 
-Retrieve contextual safety data suitable for map visualization.
+Retrieve bounded, aggregated incident-derived contextual indicators for a map
+viewport.
+
+Implemented contract: `GET /api/v1/safety/heatmap`. The request requires
+`min_latitude`, `min_longitude`, `max_latitude`, and `max_longitude`. Each
+latitude/longitude span must be between 0.02 and 2 degrees. Optional `rows`
+and `columns` default to 8 and are bounded from 2 to 12.
+
+The response contains only occupied coarse grid cells. Each cell includes its
+center, the existing SafetyEngine `risk_score`, `risk_level`, incident count,
+and assessment confidence. Empty cells are omitted; no incidents is not
+treated as a low-risk assessment.
+
+Example:
+
+`GET /api/v1/safety/heatmap?min_latitude=12.90&min_longitude=77.55&max_latitude=12.95&max_longitude=77.60&rows=8&columns=8`
+
+```json
+{
+  "bounds": {"min_latitude": 12.9, "min_longitude": 77.55, "max_latitude": 12.95, "max_longitude": 77.6},
+  "rows": 8,
+  "columns": 8,
+  "points": [{
+    "latitude": 12.928125,
+    "longitude": 77.578125,
+    "risk_score": 48,
+    "risk_level": "moderate",
+    "incident_count": 2,
+    "confidence": "low"
+  }],
+  "incident_count": 2,
+  "disclaimer": "This estimate is based on available incident data and is not a guarantee of safety."
+}
+```
+
+Incidents are queried with a PostGIS bounding envelope and assigned
+deterministically to coarse cells. Each occupied cell becomes an
+`IncidentSignalContext` assessed by the canonical SafetyEngine; the heatmap
+does not define a second scoring formula. Reporter identity, descriptions,
+IDs, and internal moderation fields are not returned. Risk levels are
+contextual indicators, not claims that a place is safe, unsafe, or dangerous.
 
 ---
 

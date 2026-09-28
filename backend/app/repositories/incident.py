@@ -91,3 +91,30 @@ class IncidentRepository:
         statement = statement.order_by(Incident.occurred_at.desc()).limit(limit)
         result = await self.session.execute(statement)
         return list(result.scalars().all())
+
+    async def list_in_bounds(
+        self,
+        *,
+        min_latitude: float,
+        min_longitude: float,
+        max_latitude: float,
+        max_longitude: float,
+        occurred_to: datetime | None = None,
+        limit: int = 1000,
+    ) -> list[Incident]:
+        """Return incidents in a bounded PostGIS viewport."""
+        viewport = func.ST_MakeEnvelope(
+            min_longitude,
+            min_latitude,
+            max_longitude,
+            max_latitude,
+            4326,
+        )
+        statement: Select[tuple[Incident]] = select(Incident).where(
+            func.ST_Intersects(Incident.location, viewport)
+        )
+        if occurred_to is not None:
+            statement = statement.where(Incident.occurred_at <= occurred_to)
+        statement = statement.order_by(Incident.occurred_at.desc()).limit(limit)
+        result = await self.session.execute(statement)
+        return list(result.scalars().all())

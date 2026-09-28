@@ -11,7 +11,7 @@ from app.services.route_comparison import (
     MODE_DESCRIPTIONS,
     RouteComparisonService,
 )
-from app.services.safety import SafetyEngine
+from app.services.safety import SafetyAssessment, SafetyEngine, risk_level_for_score
 
 
 ORIGIN = Coordinate(latitude=12.9716, longitude=77.5946)
@@ -125,6 +125,150 @@ def test_fastest_single_candidate_is_selected_and_keeps_assessment():
     assert routes[0].comparison_cost == pytest.approx(
         0.90 * routes[0].normalized_travel_score + 0.10 * assessment.risk_score
     )
+
+
+def manual_assessment(risk_score: int) -> SafetyAssessment:
+    return SafetyAssessment(
+        risk_score=risk_score,
+        risk_level=risk_level_for_score(risk_score),
+        confidence="medium",
+        factors=[],
+        incident_count=1,
+        as_of=datetime(2026, 9, 29, tzinfo=timezone.utc),
+        disclaimer="This estimate is based on available incident data and is not a guarantee of safety.",
+    )
+
+
+def test_balanced_uses_exact_documented_weights():
+    weights = DEFAULT_MODE_WEIGHTS[RouteMode.BALANCED]
+
+    assert weights.time == 0.55
+    assert weights.safety == 0.45
+    assert "available safety indicators" in MODE_DESCRIPTIONS[RouteMode.BALANCED]
+
+
+def test_balanced_can_choose_slower_route_with_substantially_lower_risk():
+    faster_high_risk = candidate("faster-high-risk", 90, manual_assessment(100))
+    slower_lower_risk = candidate("slower-lower-risk", 100, manual_assessment(60))
+
+    routes, selected = RouteComparisonService().compare(
+        [faster_high_risk, slower_lower_risk], RouteMode.BALANCED
+    )
+
+    assert selected == "slower-lower-risk"
+    assert routes[0].comparison_cost == 94.5
+    assert routes[1].comparison_cost == 82.0
+
+
+def test_balanced_time_penalty_can_outweigh_lower_risk():
+    faster_lower_risk = candidate("faster-lower-risk", 60, manual_assessment(20))
+    slower_higher_risk = candidate("slower-higher-risk", 120, manual_assessment(100))
+
+    _, selected = RouteComparisonService().compare(
+        [faster_lower_risk, slower_higher_risk], RouteMode.BALANCED
+    )
+
+    assert selected == "faster-lower-risk"
+
+
+def test_balanced_equal_duration_prefers_lower_risk():
+    higher_risk = candidate("higher-risk", 90, manual_assessment(80))
+    lower_risk = candidate("lower-risk", 90, manual_assessment(30))
+
+    _, selected = RouteComparisonService().compare(
+        [higher_risk, lower_risk], RouteMode.BALANCED
+    )
+
+    assert selected == "lower-risk"
+
+
+def test_balanced_equal_cost_uses_existing_deterministic_tie_breaking():
+    first = candidate("route-b", 91, manual_assessment(100))
+    second = candidate("route-a", 100, manual_assessment(89))
+
+    routes, selected = RouteComparisonService().compare(
+        [first, second], RouteMode.BALANCED
+    )
+
+    assert routes[0].comparison_cost == routes[1].comparison_cost
+    assert selected == "route-b"
+
+
+def test_safety_priority_uses_exact_documented_weights():
+    weights = DEFAULT_MODE_WEIGHTS[RouteMode.SAFETY_PRIORITY]
+
+    assert weights.time == 0.25
+    assert weights.safety == 0.75
+    assert weights.safety > weights.time
+    assert "available safety indicators" in MODE_DESCRIPTIONS[RouteMode.SAFETY_PRIORITY]
+
+
+def test_safety_priority_can_select_slower_route_with_materially_lower_risk():
+    faster_high_risk = candidate("faster-high-risk", 90, manual_assessment(100))
+    slower_lower_risk = candidate("slower-lower-risk", 100, manual_assessment(20))
+
+    routes, selected = RouteComparisonService().compare(
+        [faster_high_risk, slower_lower_risk], RouteMode.SAFETY_PRIORITY
+    )
+
+    assert selected == "slower-lower-risk"
+    assert routes[0].comparison_cost == 97.5
+    assert routes[1].comparison_cost == 40.0
+
+
+def test_safety_priority_does_not_ignore_a_large_travel_time_penalty():
+    faster_lower_risk = candidate("faster-lower-risk", 60, manual_assessment(20))
+    slower_higher_risk = candidate("slower-higher-risk", 120, manual_assessment(100))
+
+    _, selected = RouteComparisonService().compare(
+        [faster_lower_risk, slower_higher_risk], RouteMode.SAFETY_PRIORITY
+    )
+
+    assert selected == "faster-lower-risk"
+
+
+def test_safety_priority_equal_duration_prefers_lower_risk():
+    higher_risk = candidate("higher-risk", 90, manual_assessment(80))
+    lower_risk = candidate("lower-risk", 90, manual_assessment(30))
+
+    _, selected = RouteComparisonService().compare(
+        [higher_risk, lower_risk], RouteMode.SAFETY_PRIORITY
+    )
+
+    assert selected == "lower-risk"
+
+
+def test_safety_priority_equal_cost_uses_lower_duration_then_route_id():
+    shorter = candidate("route-b", 91, manual_assessment(100))
+    longer = candidate("route-a", 100, manual_assessment(97))
+
+    routes, selected = RouteComparisonService().compare(
+        [shorter, longer], RouteMode.SAFETY_PRIORITY
+    )
+
+    assert routes[0].comparison_cost == routes[1].comparison_cost
+    assert selected == "route-b"
+
+    same_duration = [
+        candidate("route-b", 100, manual_assessment(50)),
+        candidate("route-a", 100, manual_assessment(50)),
+    ]
+    _, selected_by_id = RouteComparisonService().compare(
+        same_duration, RouteMode.SAFETY_PRIORITY
+    )
+    assert selected_by_id == "route-a"
+
+
+def test_safety_priority_single_candidate_keeps_assessment_attached():
+    assessment = manual_assessment(68)
+
+    routes, selected = RouteComparisonService().compare(
+        [candidate("only-route", 90, assessment)], RouteMode.SAFETY_PRIORITY
+    )
+
+    assert selected == "only-route"
+    assert routes[0].safety_assessment == assessment
+    assert routes[0].comparison_cost == pytest.approx(0.25 * 100 + 0.75 * 68)
 
 
 def test_mode_weights_change_selection_using_safety_assessments():

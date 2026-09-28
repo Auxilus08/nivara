@@ -138,6 +138,62 @@ async def test_route_api_accepts_fastest_mode_and_returns_comparison_contract():
 
 
 @pytest.mark.asyncio
+async def test_route_api_accepts_balanced_mode_without_changing_contract():
+    async def override_service():
+        return RoutingService(FakeRoutingProvider())
+
+    app.dependency_overrides[get_routing_service] = override_service
+    try:
+        transport = httpx.ASGITransport(app=app)
+        async with httpx.AsyncClient(transport=transport, base_url="http://test") as client:
+            response = await client.post(
+                "/api/v1/routes",
+                json={
+                    "origin": ORIGIN.model_dump(),
+                    "destination": DESTINATION.model_dump(),
+                    "mode": "balanced",
+                },
+            )
+    finally:
+        app.dependency_overrides.clear()
+
+    body = response.json()
+    assert response.status_code == 200
+    assert body["mode"] == "balanced"
+    assert body["selected_route_id"] == "fake-provider:candidate-1"
+    assert "comparison_explanation" in body
+
+
+@pytest.mark.asyncio
+async def test_route_api_accepts_safety_priority_mode_without_changing_contract():
+    async def override_service():
+        return RoutingService(FakeRoutingProvider())
+
+    app.dependency_overrides[get_routing_service] = override_service
+    try:
+        transport = httpx.ASGITransport(app=app)
+        async with httpx.AsyncClient(transport=transport, base_url="http://test") as client:
+            response = await client.post(
+                "/api/v1/routes",
+                json={
+                    "origin": ORIGIN.model_dump(),
+                    "destination": DESTINATION.model_dump(),
+                    "mode": "safety_priority",
+                },
+            )
+    finally:
+        app.dependency_overrides.clear()
+
+    body = response.json()
+    assert response.status_code == 200
+    assert body["mode"] == "safety_priority"
+    assert body["selected_route_id"] == "fake-provider:candidate-1"
+    assert body["routes"][0]["distance_meters"] == 4200
+    assert body["routes"][0]["estimated_duration_seconds"] == 900
+    assert body["routes"][0]["comparison_cost"] == 100
+
+
+@pytest.mark.asyncio
 async def test_routing_service_propagates_provider_failures_without_database_access():
     with pytest.raises(RoutingProviderError, match="provider timed out"):
         await RoutingService(FailingRoutingProvider()).calculate_routes(

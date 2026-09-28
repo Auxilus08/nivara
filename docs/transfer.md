@@ -4,9 +4,11 @@
 
 Foundation, incident domain, deterministic Safety Engine, provider-neutral
 navigation foundation, the first concrete external routing adapter, route
-comparison with incident-derived safety enrichment, and the explicit FASTEST
-mode experience are implemented. No live
-provider key or live PostGIS database is configured in this environment.
+comparison with incident-derived safety enrichment, the explicit FASTEST mode
+experience, the explicit BALANCED mode experience, the explicit
+SAFETY_PRIORITY mode experience, and the first bounded contextual safety
+heatmap are implemented. No live provider key or live PostGIS database is
+configured in this environment.
 
 ## Last Completed Tasks
 
@@ -24,6 +26,9 @@ provider key or live PostGIS database is configured in this environment.
 - T015 Safety scoring
 - T016 Route comparison
 - T017 Fastest mode
+- T018 Balanced mode
+- T019 Safety Priority mode
+- T020 Safety heatmap
 - T030 Incident model
 - T031 Incident listing
 - T032 Incident spatial queries
@@ -32,7 +37,7 @@ provider key or live PostGIS database is configured in this environment.
 - T035 Confidence model
 - T036 Incident filtering
 
-T012 destination search and T018–T020 route modes/heatmap remain incomplete.
+T012 destination search remains incomplete.
 
 ## Navigation Architecture
 
@@ -61,6 +66,18 @@ Frontend:
   mode selection, loading/error states, and normalized route result rendering.
 - Destination search is intentionally not implemented; the geocoding protocol
   remains available for a future provider adapter.
+- `backend/app/api/routes/safety.py` exposes the bounded
+  `GET /api/v1/safety/heatmap` endpoint. It requires a 0.02–2 degree viewport
+  and accepts a 2–12 by 2–12 coarse grid.
+- `IncidentRepository.list_in_bounds` performs the bounded PostGIS envelope
+  query. `IncidentService.get_heatmap` deterministically bins incidents into
+  occupied cells and sends each cell's `IncidentSignalContext` through the
+  existing SafetyEngine.
+- `frontend/lib/navigation.ts` contains typed heatmap contracts and the API
+  client. `frontend/app/page.tsx` renders a lightweight CSS indicator overlay,
+  contextual legend, loading/error/no-data states, and the canonical
+  disclaimer. No map-rendering dependency was added because the repository has
+  no existing map library and T020 does not require selecting one.
 
 ## Provider Configuration
 
@@ -101,11 +118,24 @@ FASTEST is explicitly described as prioritizing shorter travel time while
 retaining available safety indicators. Comparison ties use lower duration, then
 lexicographically lower `route_id`, after comparison cost.
 
+BALANCED is explicitly described as balancing travel time with available safety
+indicators. It uses time/safety weights of 0.55/0.45 with the same normalized
+duration and SafetyEngine risk score used by the comparison service. Tests cover
+both directions of the trade-off, equal-duration safety selection, equal-cost
+tie behavior, single-candidate behavior, and safety assessment visibility.
+
+SAFETY_PRIORITY is explicitly described as placing greater weight on available
+safety indicators than travel time. It uses time/safety weights of 0.25/0.75.
+Tests cover slower lower-risk selection, large travel-time penalties, equal-
+duration risk selection, deterministic ties, single candidates, assessment
+visibility, and the API contract.
+
 ## API
 
 Implemented:
 
 - `POST /api/v1/routes`
+- `GET /api/v1/safety/heatmap`
 
 If the routing key is missing or rejected, the endpoint returns a provider-
 neutral `503` configuration error. Rate limits return `429`, timeouts return
@@ -117,11 +147,20 @@ If any candidate lacks incident context, comparison falls back to normalized
 travel time for all candidates and explains that safety indicators were
 unavailable; missing context is never treated as zero risk.
 
+## Heatmap Contract and Limitations
+
+The heatmap returns occupied cell centers with `risk_score`, `risk_level`,
+`incident_count`, and assessment `confidence`, plus bounds, grid dimensions,
+total incident count, and the contextual disclaimer. It does not return
+incident IDs, descriptions, reporter identity, or moderation fields. No-data
+cells are omitted and no score is fabricated for them. The visualization is
+contextual incident activity, not a prediction or guarantee of safety.
+
 ## Verification Performed
 
 - `python3 -m pip install -e '.[test]' --user` from `backend/` — passed
-- `pytest -q` from `backend/` — passed, 53 tests
-- `python3 -m compileall -q app` — passed
+- `pytest -q` from `backend/` — passed, 76 tests
+- `python -m compileall backend/app` — passed
 - `git diff --check` — passed
 - `pnpm typecheck` from `frontend/` — passed
 - `pnpm build` from `frontend/` — passed
@@ -143,9 +182,11 @@ integration was run or claimed because no credential was configured.
   account for route segment length, isolation, lighting, activity, or other
   future signals.
 - The map surface is a frontend shell, not a custom map engine.
+- Heatmap points are occupied coarse cells centered on aggregated incident
+  locations; the frontend overlay is illustrative and does not provide map
+  tiles or route selection.
 
 ## Exact Next Task
 
-T018 — Validate the BALANCED mode experience using the existing comparison
-service. Preserve provider-neutral contracts and contextual, non-guaranteed
-safety language.
+T037 — Build the incident UI on top of the incident and heatmap API contracts,
+preserving contextual language and privacy boundaries.

@@ -31,9 +31,9 @@ Status values:
 - [x] T015 Safety scoring
 - [x] T016 Route comparison
 - [x] T017 Fastest mode
-- [ ] T018 Balanced mode
-- [ ] T019 Safety Priority mode
-- [ ] T020 Safety heatmap
+- [x] T018 Balanced mode
+- [x] T019 Safety Priority mode
+- [x] T020 Safety heatmap
 
 ---
 

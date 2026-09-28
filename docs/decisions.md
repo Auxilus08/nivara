@@ -264,3 +264,67 @@ Reason:
 
 Users need a clear travel-time-oriented mode without losing contextual safety
 information or introducing nondeterministic route selection.
+
+---
+
+## ADR-018: BALANCED mode semantics
+
+Decision:
+
+Define BALANCED as the route-selection objective with time weight `0.55` and
+safety weight `0.45`. It uses the existing normalized travel-time score and
+the existing SafetyEngine risk score without introducing a second safety
+model. A faster route can lose when its risk score is sufficiently higher; a
+lower-risk route can lose when its travel-time penalty is sufficiently large.
+
+Reason:
+
+The mode must express a genuine trade-off between travel efficiency and
+available contextual incident indicators while preserving provider-neutral
+contracts and deterministic comparison behavior.
+
+---
+
+## ADR-019: SAFETY_PRIORITY mode semantics
+
+Decision:
+
+Define SAFETY_PRIORITY as the route-selection objective with time weight `0.25`
+and safety weight `0.75`. It uses the existing normalized travel-time score and
+the existing SafetyEngine risk score. A slower route with materially lower
+estimated risk can be selected, but a sufficiently large travel-time penalty
+can still outweigh lower risk.
+
+Reason:
+
+The mode should prioritize lower estimated incident risk without presenting any
+route as safe or guaranteed to protect the user. Keeping a non-zero time weight
+prevents the mode from becoming a simple longest-route selector.
+
+---
+
+## ADR-020: Bounded contextual safety heatmap
+
+Decision:
+
+Expose `GET /api/v1/safety/heatmap` as a bounded viewport query. The repository
+uses PostGIS `ST_MakeEnvelope` and `ST_Intersects` to retrieve incidents within
+the requested bounds. The service assigns incidents to a deterministic coarse
+grid, builds an `IncidentSignalContext` for each occupied cell, and calls the
+existing SafetyEngine to produce the cell's assessment. It returns cell centers
+and aggregate contextual fields only; empty cells are omitted rather than
+being treated as lower risk.
+
+The viewport is limited to a 0.02–2 degree span, grid dimensions to 2–12 per
+axis, and repository results to a bounded maximum. This provides a practical
+visualization while limiting database work and reducing unnecessary exposure of
+precise incident locations. The frontend uses a dependency-free CSS overlay on
+the current map shell until a concrete map-rendering provider is selected.
+
+Reason:
+
+The heatmap must reuse the canonical deterministic SafetyEngine without
+introducing a second frontend score or a database dependency in that engine.
+Coarse aggregation provides contextual indicators for the hackathon UI while
+preserving non-guaranteed safety language and avoiding reporter or raw incident
+data exposure.

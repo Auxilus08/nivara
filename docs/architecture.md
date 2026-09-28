@@ -295,7 +295,35 @@ BALANCED 0.55/0.45, and SAFETY_PRIORITY 0.25/0.75 for time/safety.
 
 ---
 
-## 11. Safe Trip Data Flow
+## 11. Safety Heatmap Data Flow
+
+Map viewport
+    ->
+Bounded PostGIS incident query
+    ->
+Deterministic coarse grid aggregation
+    ->
+IncidentSignalContext per occupied cell
+    ->
+SafetyEngine
+    ->
+Contextual heatmap points
+
+`GET /api/v1/safety/heatmap` accepts a bounded viewport and a small grid
+dimension. The incident repository performs the `ST_MakeEnvelope` and
+`ST_Intersects` query; the service assigns returned incidents to cells and
+passes each occupied cell's signals to the existing database-independent
+SafetyEngine. The API exposes cell centers, assessment values, and aggregate
+counts only. It omits raw incident identity and other unnecessary details.
+
+The frontend currently renders the returned points as a lightweight CSS
+contextual overlay on the existing map shell. This is a visualization layer,
+not a map engine or a route-selection algorithm. No-data cells are omitted and
+are not assigned a low-risk score.
+
+---
+
+## 12. Safe Trip Data Flow
 
 Selected route
     ->
@@ -313,7 +341,7 @@ Trip completion
 
 ---
 
-## 12. Emergency Data Flow
+## 13. Emergency Data Flow
 
 SOS activation
     ->
@@ -331,7 +359,7 @@ Resolution
 
 ---
 
-## 13. Privacy
+## 14. Privacy
 
 Location is sensitive.
 
@@ -346,7 +374,7 @@ Location sharing must be controlled by explicit user settings.
 
 ---
 
-## 14. Future News Pipeline
+## 15. Future News Pipeline
 
 News
  ->

@@ -17,8 +17,8 @@ DEFAULT_MODE_WEIGHTS = {
 
 MODE_DESCRIPTIONS = {
     RouteMode.FASTEST: "Prioritizes shorter travel time while retaining available safety indicators.",
-    RouteMode.BALANCED: "Balances travel time with contextual incident indicators.",
-    RouteMode.SAFETY_PRIORITY: "Gives greater weight to lower estimated incident risk while retaining reasonable travel time.",
+    RouteMode.BALANCED: "Balances travel time with available safety indicators.",
+    RouteMode.SAFETY_PRIORITY: "Places greater weight on available safety indicators than travel time.",
 }
 
 

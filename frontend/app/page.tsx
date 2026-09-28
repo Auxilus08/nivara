@@ -6,7 +6,11 @@ import { LocateFixed, Map, ShieldCheck } from "lucide-react";
 import { Card, CardContent } from "@/components/ui/card";
 import {
   calculateRoutes,
+  calculateHeatmap,
   type Coordinate,
+  type HeatmapPoint,
+  type HeatmapResponse,
+  type HeatmapViewport,
   type RouteMode,
   type RouteResponse,
 } from "@/lib/navigation";
@@ -39,8 +43,24 @@ function formatMode(mode: RouteMode) {
 
 function describeMode(mode: RouteMode) {
   if (mode === "fastest") return "Prioritizes shorter travel time while retaining available safety indicators.";
-  if (mode === "balanced") return "Balances travel time with contextual incident indicators.";
-  return "Gives greater weight to lower estimated incident risk while retaining reasonable travel time.";
+  if (mode === "balanced") return "Balances travel time with available safety indicators.";
+  return "Places greater weight on available safety indicators than travel time.";
+}
+
+function heatmapViewport(coordinate: Coordinate): HeatmapViewport {
+  return {
+    min_latitude: Math.max(-90, coordinate.latitude - 0.05),
+    min_longitude: Math.max(-180, coordinate.longitude - 0.05),
+    max_latitude: Math.min(90, coordinate.latitude + 0.05),
+    max_longitude: Math.min(180, coordinate.longitude + 0.05),
+  };
+}
+
+function heatmapColor(point: HeatmapPoint) {
+  if (point.risk_level === "high") return "#dc2626";
+  if (point.risk_level === "elevated") return "#f97316";
+  if (point.risk_level === "moderate") return "#eab308";
+  return "#22c55e";
 }
 
 export default function HomePage() {
@@ -51,6 +71,9 @@ export default function HomePage() {
   const [isLocating, setIsLocating] = useState(false);
   const [isRouting, setIsRouting] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [heatmap, setHeatmap] = useState<HeatmapResponse | null>(null);
+  const [isLoadingHeatmap, setIsLoadingHeatmap] = useState(false);
+  const [heatmapError, setHeatmapError] = useState<string | null>(null);
 
   function requestLocation() {
     if (!navigator.geolocation) {
@@ -62,6 +85,8 @@ export default function HomePage() {
     navigator.geolocation.getCurrentPosition(
       ({ coords }) => {
         setCurrentLocation({ latitude: coords.latitude, longitude: coords.longitude });
+        setHeatmap(null);
+        setHeatmapError(null);
         setIsLocating(false);
       },
       (positionError) => {
@@ -74,6 +99,26 @@ export default function HomePage() {
       },
       { enableHighAccuracy: false, timeout: 10000, maximumAge: 30000 },
     );
+  }
+
+  async function loadHeatmap() {
+    if (!currentLocation) {
+      setHeatmapError("Use your current location to define the map viewport.");
+      return;
+    }
+    setIsLoadingHeatmap(true);
+    setHeatmapError(null);
+    try {
+      setHeatmap(await calculateHeatmap(heatmapViewport(currentLocation)));
+    } catch (heatmapRequestError) {
+      setHeatmapError(
+        heatmapRequestError instanceof Error
+          ? heatmapRequestError.message
+          : "The contextual indicators could not be loaded.",
+      );
+    } finally {
+      setIsLoadingHeatmap(false);
+    }
   }
 
   async function submitRoute(event: FormEvent<HTMLFormElement>) {
@@ -112,15 +157,43 @@ export default function HomePage() {
 
         <section className="grid gap-6 lg:grid-cols-[1.15fr_0.85fr]">
           <Card className="overflow-hidden border-slate-200">
-            <div className="flex h-[420px] items-center justify-center bg-slate-100 p-6">
-              <div className="relative flex h-full w-full items-center justify-center overflow-hidden rounded-xl border border-dashed border-slate-300 bg-[radial-gradient(circle_at_center,_#ffffff_0,_#f1f5f9_65%)]">
+            <div className="flex h-[420px] flex-col items-center justify-center bg-slate-100 p-6">
+              <div className="relative flex min-h-0 w-full flex-1 items-center justify-center overflow-hidden rounded-xl border border-dashed border-slate-300 bg-[radial-gradient(circle_at_center,_#ffffff_0,_#f1f5f9_65%)]">
                 <Map className="text-slate-300" size={80} strokeWidth={1} />
+                {heatmap && heatmap.points.map((point) => {
+                  const left = ((point.longitude - heatmap.bounds.min_longitude) / (heatmap.bounds.max_longitude - heatmap.bounds.min_longitude)) * 100;
+                  const top = (1 - ((point.latitude - heatmap.bounds.min_latitude) / (heatmap.bounds.max_latitude - heatmap.bounds.min_latitude))) * 100;
+                  return (
+                    <div
+                      key={`${point.latitude}-${point.longitude}`}
+                      className="absolute h-12 w-12 -translate-x-1/2 -translate-y-1/2 rounded-full opacity-60 blur-sm"
+                      style={{ left: `${left}%`, top: `${top}%`, backgroundColor: heatmapColor(point) }}
+                      title={`${point.risk_level} contextual risk indicators, score ${point.risk_score}`}
+                    />
+                  );
+                })}
                 {currentLocation && (
                   <div className="absolute left-1/2 top-1/2 flex -translate-x-1/2 -translate-y-1/2 items-center gap-2 rounded-full bg-indigo-600 px-3 py-2 text-xs font-medium text-white shadow-lg">
                     <LocateFixed size={14} /> Current location
                   </div>
                 )}
-                <span className="absolute bottom-4 left-4 rounded bg-white/90 px-2 py-1 text-xs text-slate-500 shadow-sm">Provider map surface pending</span>
+                <div className="absolute bottom-3 left-3 right-3 flex items-end justify-between gap-3">
+                  <span className="rounded bg-white/90 px-2 py-1 text-xs text-slate-500 shadow-sm">Provider map surface pending</span>
+                  <button type="button" onClick={loadHeatmap} disabled={isLoadingHeatmap || !currentLocation} className="rounded-lg bg-white/95 px-3 py-2 text-xs font-medium text-indigo-700 shadow-sm disabled:cursor-not-allowed disabled:opacity-50">
+                    {isLoadingHeatmap ? "Loading indicators…" : "Show contextual indicators"}
+                  </button>
+                </div>
+              </div>
+              <div className="mt-3 rounded-xl border border-slate-200 bg-white p-3">
+                <p className="text-xs font-semibold text-slate-700">Contextual risk indicators</p>
+                <div className="mt-2 flex flex-wrap gap-3 text-xs text-slate-600">
+                  {[['#22c55e', 'LOW'], ['#eab308', 'MODERATE'], ['#f97316', 'ELEVATED'], ['#dc2626', 'HIGH']].map(([color, label]) => (
+                    <span key={label} className="flex items-center gap-1.5"><span className="h-2.5 w-2.5 rounded-full" style={{ backgroundColor: color }} />{label}</span>
+                  ))}
+                </div>
+                {heatmapError && <p role="alert" className="mt-2 text-xs text-rose-700">{heatmapError}</p>}
+                {heatmap && heatmap.points.length === 0 && <p className="mt-2 text-xs text-slate-500">No incident-derived indicators were returned for this viewport.</p>}
+                {heatmap && heatmap.points.length > 0 && <p className="mt-2 text-xs text-slate-500">{heatmap.incident_count} incident-derived indicator(s) aggregated into the viewport. {heatmap.disclaimer}</p>}
               </div>
             </div>
           </Card>
