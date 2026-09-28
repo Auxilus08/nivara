@@ -52,11 +52,19 @@ class RouteCandidate(BaseModel):
     provider: str
     provider_metadata: dict[str, str] = Field(default_factory=dict)
     safety_assessment: SafetyAssessment | None = None
+    normalized_travel_score: float | None = Field(default=None, ge=0, le=100)
+    comparison_cost: float | None = Field(default=None, ge=0)
+    comparison_explanation: str | None = None
 
 
 class RouteResponse(BaseModel):
     mode: RouteMode
     routes: list[RouteCandidate]
+    selected_route_id: str | None = None
+    comparison_explanation: str = (
+        "Route selection is based on the configured objective and available data; "
+        "it is not a guarantee of safety."
+    )
 
 
 class DestinationSuggestion(BaseModel):

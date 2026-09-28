@@ -15,6 +15,7 @@ from app.models.incident import (
 )
 from app.repositories.incident import IncidentRepository
 from app.schemas.incident import IncidentReportCreate
+from app.schemas.routes import Coordinate, RouteGeometry
 from app.services.incidents import IncidentService, calculate_initial_confidence
 
 
@@ -59,6 +60,10 @@ class FakeIncidentRepository:
 
     async def list(self, **filters):
         self.last_filters = filters
+        return self.incidents[: filters["limit"]]
+
+    async def list_near_route(self, **filters):
+        self.last_route_filters = filters
         return self.incidents[: filters["limit"]]
 
 
@@ -158,6 +163,24 @@ async def test_contextual_signal_contract_is_database_independent(fake_repositor
     assert "unverified community reports" in context.indicator_notes[1]
 
 
+@pytest.mark.asyncio
+async def test_route_context_uses_corridor_repository_and_preserves_signal_contract(fake_repository):
+    context = await IncidentService(fake_repository).get_route_contextual_signals(
+        geometry=RouteGeometry(
+            coordinates=[
+                Coordinate(latitude=12.9716, longitude=77.5946),
+                Coordinate(latitude=12.9352, longitude=77.6245),
+            ]
+        ),
+        corridor_radius_meters=125,
+    )
+
+    assert context.incident_count == 1
+    assert context.radius_meters == 125
+    assert "route corridor" in context.indicator_notes[0]
+    assert fake_repository.last_route_filters["corridor_radius_meters"] == 125
+
+
 def test_report_schema_requires_timezone_and_rejects_future_timestamp():
     with pytest.raises(ValueError, match="timezone"):
         IncidentReportCreate(
@@ -203,3 +226,37 @@ async def test_repository_spatial_query_uses_postgis_function():
     sql = str(session.statement.compile(dialect=dialect()))
     assert "ST_DWithin" in sql
     assert "incidents.location" in sql
+
+
+@pytest.mark.asyncio
+async def test_repository_route_corridor_query_uses_postgis_line_and_dwithin():
+    class FakeSession:
+        def __init__(self):
+            self.statement = None
+
+        async def execute(self, statement):
+            self.statement = statement
+
+            class Result:
+                def scalars(self):
+                    return self
+
+                def all(self):
+                    return []
+
+            return Result()
+
+    session = FakeSession()
+    await IncidentRepository(session).list_near_route(
+        coordinates=[
+            Coordinate(latitude=1, longitude=2),
+            Coordinate(latitude=3, longitude=4),
+        ],
+        corridor_radius_meters=100,
+        limit=10,
+    )
+    from sqlalchemy.dialects.postgresql import dialect
+
+    sql = str(session.statement.compile(dialect=dialect()))
+    assert "ST_DWithin" in sql
+    assert "ST_GeomFromText" in sql

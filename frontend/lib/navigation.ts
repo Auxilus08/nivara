@@ -20,13 +20,19 @@ export type RouteCandidate = {
     risk_score: number;
     risk_level: string;
     confidence: string;
+    factors: { name: string; contribution: number; description: string }[];
     disclaimer: string;
   } | null;
+  normalized_travel_score: number | null;
+  comparison_cost: number | null;
+  comparison_explanation: string | null;
 };
 
 export type RouteResponse = {
   mode: RouteMode;
   routes: RouteCandidate[];
+  selected_route_id: string | null;
+  comparison_explanation: string;
 };
 
 export class NavigationApiError extends Error {

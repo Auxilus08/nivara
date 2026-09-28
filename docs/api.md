@@ -61,12 +61,37 @@ Request body:
 Supported modes are `fastest`, `balanced`, and `safety_priority`. The current
 foundation validates the mode and coordinates and normalizes provider results
 to Nivara-owned route objects containing route ID, origin, destination,
-distance, duration, provider-neutral geometry, provider metadata, and an
-optional future `safety_assessment`.
+distance, duration, provider-neutral geometry, provider metadata, normalized
+travel-time score, comparison cost, and optional `safety_assessment`.
 
-If no concrete external provider adapter is configured, the endpoint returns
-`503` with a structured `routing_provider_unavailable` error. It never returns
-fabricated route data.
+The response also includes `selected_route_id` and a contextual
+`comparison_explanation`. Candidates are compared using normalized travel time
+and incident-derived safety assessments when every candidate has available
+context. Missing safety context is reported explicitly and does not become a
+zero-risk value.
+
+If the configured provider is unsupported or its server-side API key is missing,
+the endpoint returns `503` with a structured provider-neutral configuration
+error. Rate limits return `429`; provider timeouts return `504`; provider HTTP
+or response-shape errors return `502`. It never returns fabricated route data.
+
+The current adapter uses openrouteservice's Directions GeoJSON endpoint:
+`POST https://api.openrouteservice.org/v2/directions/driving-car/geojson`.
+The server sends the API key in the `Authorization` header; it is never sent
+from the frontend.
+
+OpenRouteService alternative routes are requested with a bounded target count
+of three. The provider may return fewer candidates depending on route length,
+coverage, or provider constraints; the API never fabricates alternatives.
+
+When incident context is available, route comparison uses the following
+normalized objective:
+
+`comparison_cost = time_weight * normalized_travel_score + safety_weight * risk_score`
+
+where `normalized_travel_score = duration / maximum_candidate_duration * 100`.
+Lower cost is the configured selection objective, not an objective safety
+claim.
 
 ---
 

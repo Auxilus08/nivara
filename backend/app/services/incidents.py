@@ -14,6 +14,7 @@ from app.models.incident import (
 )
 from app.repositories.incident import IncidentRepository
 from app.schemas.incident import IncidentReportCreate, IncidentSignalContext
+from app.schemas.routes import RouteGeometry
 
 
 def calculate_initial_confidence(source: IncidentSource) -> tuple[ConfidenceLevel, list[str]]:
@@ -87,11 +88,56 @@ class IncidentService:
             occurred_to=effective_as_of,
             limit=100,
         )
-        recent_cutoff = effective_as_of - timedelta(days=30)
+        return self._signals_from_incidents(
+            incidents=incidents,
+            latitude=latitude,
+            longitude=longitude,
+            radius_meters=radius_meters,
+            as_of=effective_as_of,
+        )
+
+    async def get_route_contextual_signals(
+        self,
+        *,
+        geometry: RouteGeometry,
+        corridor_radius_meters: float,
+        as_of: datetime | None = None,
+    ) -> IncidentSignalContext:
+        effective_as_of = as_of or datetime.now(timezone.utc)
+        incidents = await self.repository.list_near_route(
+            coordinates=geometry.coordinates,
+            corridor_radius_meters=corridor_radius_meters,
+            occurred_to=effective_as_of,
+            limit=100,
+        )
+        latitude = sum(point.latitude for point in geometry.coordinates) / len(geometry.coordinates)
+        longitude = sum(point.longitude for point in geometry.coordinates) / len(geometry.coordinates)
+        return self._signals_from_incidents(
+            incidents=incidents,
+            latitude=latitude,
+            longitude=longitude,
+            radius_meters=corridor_radius_meters,
+            as_of=effective_as_of,
+            route_context=True,
+        )
+
+    def _signals_from_incidents(
+        self,
+        *,
+        incidents: list[Incident],
+        latitude: float,
+        longitude: float,
+        radius_meters: float,
+        as_of: datetime,
+        route_context: bool = False,
+    ) -> IncidentSignalContext:
+        recent_cutoff = as_of - timedelta(days=30)
         severity_counts = Counter(item.severity.value for item in incidents)
         category_counts = Counter(item.category.value for item in incidents)
         confidence_counts = Counter(item.confidence_level.value for item in incidents)
         notes = []
+        if route_context:
+            notes.append("incident indicators were collected within the configured route corridor")
         if incidents:
             notes.append(f"{len(incidents)} incident-derived indicators in the requested area")
         else:
@@ -102,7 +148,7 @@ class IncidentService:
             latitude=latitude,
             longitude=longitude,
             radius_meters=radius_meters,
-            as_of=effective_as_of,
+            as_of=as_of,
             incident_count=len(incidents),
             recent_incident_count=sum(item.occurred_at >= recent_cutoff for item in incidents),
             severity_counts=dict(severity_counts),

@@ -197,3 +197,49 @@ Reason:
 Nivara should depend on external routing capability without coupling its core
 contracts to an unselected vendor or exposing provider credentials to the
 browser.
+
+---
+
+## ADR-015: Initial external routing provider
+
+Decision:
+
+Use openrouteservice's Directions GeoJSON API as the first concrete routing
+adapter. The adapter sends POST requests to
+`https://api.openrouteservice.org/v2/directions/driving-car/geojson` with the
+server-side `Authorization` API key and normalizes GeoJSON `LineString`
+coordinates plus summary distance and duration into `ProviderRoute`.
+
+Reason:
+
+Its documented HTTP API accepts coordinate pairs and returns route geometry,
+distance, and duration suitable for the current contract. The adapter remains
+behind `RoutingProvider` so it can be replaced without changing API, frontend,
+incident, or Safety Engine code. Route modes are passed through as contract
+values only; this adapter does not claim safety-aware optimization.
+
+---
+
+## ADR-016: Route comparison and incident corridor enrichment
+
+Decision:
+
+Keep route comparison in a provider-neutral service. `RoutingService` obtains
+route-corridor incident context through `IncidentService`, passes the resulting
+`IncidentSignalContext` to the existing `SafetyEngine`, and attaches each
+available `SafetyAssessment` before comparison. The repository uses a PostGIS
+LineString corridor query with a configurable 100-metre default.
+
+Comparison normalizes each candidate's duration against the slowest candidate
+and combines it with the 0–100 contextual risk score. The time/safety weights
+are FASTEST 0.90/0.10, BALANCED 0.55/0.45, and SAFETY_PRIORITY 0.25/0.75.
+When any candidate lacks incident context, all candidates are compared by
+normalized travel time only and the response explains that limitation; missing
+context is never represented as low risk.
+
+Reason:
+
+This creates the first route-selection vertical slice without changing the
+deterministic SafetyEngine or coupling it to SQL/PostGIS/provider formats.
+The result remains an estimate based on available data and is not a guarantee
+of safety.

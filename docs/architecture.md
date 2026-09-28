@@ -261,9 +261,11 @@ Destination
     ->
 Routing provider
     ->
-Candidate routes
+    Candidate routes
     ->
-Safety engine
+Incident corridor context
+    ->
+    Safety engine
     ->
 Route comparison
     ->
@@ -275,7 +277,21 @@ The navigation foundation keeps external routing behind
 `backend/app/providers/routing.py`. `RoutingService` consumes the provider
 protocol and returns normalized Nivara route contracts. Provider-specific
 response formats do not cross into API or frontend code. A concrete provider
-adapter is intentionally not selected yet.
+adapter is implemented for openrouteservice's Directions GeoJSON API, while
+the protocol remains replaceable.
+
+`RoutingService` optionally coordinates `IncidentService`, the database-
+independent `IncidentSignalContext`, `SafetyEngine`, and
+`RouteComparisonService`. Incident corridor collection remains in the
+repository layer and uses PostGIS `ST_DWithin` against a route LineString.
+The configured corridor width is `ROUTE_CORRIDOR_RADIUS_METERS` (100 metres by
+default, bounded to 25–1000 metres). Safety scoring is not performed in API
+handlers or provider adapters.
+
+Route comparison currently uses only travel time and incident-derived risk;
+isolation and other future signals are intentionally absent until supported by
+their own contracts. Mode weights are centralized: FASTEST 0.90/0.10,
+BALANCED 0.55/0.45, and SAFETY_PRIORITY 0.25/0.75 for time/safety.
 
 ---
 

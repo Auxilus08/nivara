@@ -33,6 +33,10 @@ function parseDestination(value: string): Coordinate | null {
   return { latitude, longitude };
 }
 
+function formatMode(mode: RouteMode) {
+  return mode === "safety_priority" ? "Safety Priority" : mode[0].toUpperCase() + mode.slice(1);
+}
+
 export default function HomePage() {
   const [currentLocation, setCurrentLocation] = useState<Coordinate | null>(null);
   const [destination, setDestination] = useState("");
@@ -151,19 +155,29 @@ export default function HomePage() {
               <div className="flex items-center justify-between">
                 <div>
                   <h2 className="font-semibold">Route results</h2>
-                  <p className="mt-1 text-sm text-slate-500">{routeResponse.routes.length} candidate route(s), mode: {routeResponse.mode}</p>
+                  <p className="mt-1 text-sm text-slate-500">{routeResponse.routes.length} candidate route(s), mode: {formatMode(routeResponse.mode)}</p>
                 </div>
                 <ShieldCheck className="text-indigo-600" size={22} />
               </div>
               <div className="mt-4 grid gap-3 sm:grid-cols-2">
                 {routeResponse.routes.map((route) => (
-                  <div key={route.route_id} className="rounded-xl border border-slate-200 p-4">
-                    <p className="font-medium">{route.route_id}</p>
+                  <div key={route.route_id} className={`rounded-xl border p-4 ${route.route_id === routeResponse.selected_route_id ? "border-indigo-400 bg-indigo-50/50" : "border-slate-200"}`}>
+                    <div className="flex items-center justify-between gap-3">
+                      <p className="font-medium">{route.route_id}</p>
+                      {route.route_id === routeResponse.selected_route_id && <span className="rounded-full bg-indigo-100 px-2 py-1 text-xs font-medium text-indigo-700">Selected for {formatMode(routeResponse.mode)}</span>}
+                    </div>
                     <p className="mt-2 text-sm text-slate-600">{(route.distance_meters / 1000).toFixed(1)} km · {Math.ceil(route.estimated_duration_seconds / 60)} min</p>
-                    {route.safety_assessment && <p className="mt-2 text-xs text-slate-500">Contextual risk indicators: {route.safety_assessment.risk_level}</p>}
+                    {route.normalized_travel_score !== null && <p className="mt-2 text-xs text-slate-500">Travel-time score: {route.normalized_travel_score.toFixed(1)} · Comparison cost: {route.comparison_cost?.toFixed(1) ?? "—"}</p>}
+                    {route.safety_assessment ? (
+                      <div className="mt-2 space-y-1 text-xs text-slate-600">
+                        <p>Contextual risk indicators: {route.safety_assessment.risk_level} ({route.safety_assessment.risk_score}/100)</p>
+                        <p>{route.safety_assessment.factors.find((factor) => factor.contribution > 0)?.description ?? "Limited incident activity indicators were available."}</p>
+                      </div>
+                    ) : <p className="mt-2 text-xs text-slate-500">Incident-derived safety indicators were unavailable for this route.</p>}
                   </div>
                 ))}
               </div>
+              <p className="mt-4 text-xs text-slate-500">{routeResponse.comparison_explanation}</p>
             </CardContent>
           </Card>
         )}

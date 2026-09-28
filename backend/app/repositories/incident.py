@@ -1,4 +1,5 @@
 from datetime import datetime
+from collections.abc import Sequence
 from uuid import UUID
 
 from geoalchemy2 import Geography
@@ -12,6 +13,7 @@ from app.models.incident import (
     IncidentSeverity,
     IncidentStatus,
 )
+from app.schemas.routes import Coordinate
 
 
 class IncidentRepository:
@@ -57,6 +59,35 @@ class IncidentRepository:
         if latitude is not None and longitude is not None and radius_meters is not None:
             point = func.ST_SetSRID(func.ST_MakePoint(longitude, latitude), 4326)
             statement = statement.where(func.ST_DWithin(cast(Incident.location, Geography), cast(point, Geography), radius_meters))
+        statement = statement.order_by(Incident.occurred_at.desc()).limit(limit)
+        result = await self.session.execute(statement)
+        return list(result.scalars().all())
+
+    async def list_near_route(
+        self,
+        *,
+        coordinates: Sequence[Coordinate],
+        corridor_radius_meters: float,
+        occurred_to: datetime | None = None,
+        limit: int = 100,
+    ) -> list[Incident]:
+        """Return incidents within a PostGIS corridor around a route line."""
+        if len(coordinates) < 2:
+            return []
+
+        line_wkt = "LINESTRING(" + ", ".join(
+            f"{coordinate.longitude} {coordinate.latitude}" for coordinate in coordinates
+        ) + ")"
+        route_line = func.ST_GeomFromText(line_wkt, 4326)
+        statement: Select[tuple[Incident]] = select(Incident).where(
+            func.ST_DWithin(
+                cast(Incident.location, Geography),
+                cast(route_line, Geography),
+                corridor_radius_meters,
+            )
+        )
+        if occurred_to is not None:
+            statement = statement.where(Incident.occurred_at <= occurred_to)
         statement = statement.order_by(Incident.occurred_at.desc()).limit(limit)
         result = await self.session.execute(statement)
         return list(result.scalars().all())

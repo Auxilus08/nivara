@@ -26,10 +26,10 @@ Status values:
 - [x] T010 Map integration
 - [x] T011 Current location
 - [ ] T012 Destination search
-- [ ] T013 Routing integration
+- [x] T013 Routing integration
 - [x] T014 Route normalization
 - [x] T015 Safety scoring
-- [ ] T016 Route comparison
+- [x] T016 Route comparison
 - [ ] T017 Fastest mode
 - [ ] T018 Balanced mode
 - [ ] T019 Safety Priority mode
