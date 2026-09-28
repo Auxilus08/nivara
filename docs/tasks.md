@@ -23,12 +23,12 @@ Status values:
 
 # Navigation
 
-- [ ] T010 Map integration
-- [ ] T011 Current location
+- [x] T010 Map integration
+- [x] T011 Current location
 - [ ] T012 Destination search
 - [ ] T013 Routing integration
-- [ ] T014 Route normalization
-- [ ] T015 Safety scoring
+- [x] T014 Route normalization
+- [x] T015 Safety scoring
 - [ ] T016 Route comparison
 - [ ] T017 Fastest mode
 - [ ] T018 Balanced mode
@@ -39,13 +39,13 @@ Status values:
 
 # Incidents
 
-- [ ] T030 Incident model
-- [ ] T031 Incident listing
-- [ ] T032 Incident spatial queries
-- [ ] T033 Community report creation
-- [ ] T034 Community report validation
-- [ ] T035 Confidence model
-- [ ] T036 Incident filtering
+- [x] T030 Incident model
+- [x] T031 Incident listing
+- [x] T032 Incident spatial queries
+- [x] T033 Community report creation
+- [x] T034 Community report validation
+- [x] T035 Confidence model
+- [x] T036 Incident filtering
 - [ ] T037 Incident UI
 
 ---

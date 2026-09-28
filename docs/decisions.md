@@ -145,3 +145,55 @@ Reason:
 This keeps feature agents independent at the API/service/repository boundaries
 while allowing the application and frontend to run before feature integrations
 or a local database are available.
+
+---
+
+## ADR-012: Incident confidence and safety input boundary
+
+Decision:
+
+Persist incident context in PostGIS-backed repositories and expose a
+database-independent incident signal DTO from the incident service. Confidence
+uses explainable levels (`unverified`, `corroborated`, `higher_confidence`) and
+factors rather than a probability score.
+
+Reason:
+
+The Safety Engine must consume contextual incident indicators without knowing
+SQL or PostGIS details, and a single community report must not be presented as
+validated truth.
+
+---
+
+## ADR-013: Deterministic incident-derived safety assessment
+
+Decision:
+
+Implement safety assessment as a pure service that consumes
+`IncidentSignalContext` and returns an explainable 0–100 contextual estimate.
+The centralized weights are incident density 35, recency 25, severity 25,
+confidence 10, and category activity 5. Risk levels are LOW (0–24), MODERATE
+(25–49), ELEVATED (50–74), and HIGH (75–100).
+
+Reason:
+
+Future routing consumers need a stable, database-independent safety input. A
+small deterministic model is inspectable and testable for the hackathon while
+avoiding unsupported probability claims or premature machine learning.
+
+---
+
+## ADR-014: Provider-neutral navigation boundary
+
+Decision:
+
+Keep routing and geocoding behind provider protocols and normalize route data
+before it reaches the API or frontend. Until a concrete external provider is
+selected and configured, the route API returns an explicit unavailable error
+rather than fabricated route results.
+
+Reason:
+
+Nivara should depend on external routing capability without coupling its core
+contracts to an unselected vendor or exposing provider credentials to the
+browser.

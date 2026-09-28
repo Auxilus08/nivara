@@ -2,8 +2,9 @@
 
 ## Current Status
 
-Foundation implementation is complete and runnable at the application level.
-No product feature domains have been implemented yet.
+Foundation, incident domain, deterministic Safety Engine, and provider-neutral
+navigation foundation are implemented. No concrete external map/routing
+provider is configured yet.
 
 ## Last Completed Tasks
 
@@ -14,77 +15,102 @@ No product feature domains have been implemented yet.
 - T005 Configuration/environment foundation
 - T006 API foundation
 - T007 Testing foundation
+- T010 Map integration foundation
+- T011 Current location
+- T014 Route normalization
+- T015 Safety scoring
+- T030 Incident model
+- T031 Incident listing
+- T032 Incident spatial queries
+- T033 Community report creation
+- T034 Community report validation
+- T035 Confidence model
+- T036 Incident filtering
 
-## Current Architecture
+T012 destination search, T013 concrete routing integration, T016 route
+comparison, and T017–T020 route modes/heatmap remain incomplete.
+
+## Navigation Architecture
 
 Backend:
 
-- `backend/app/main.py` creates the FastAPI app and registers CORS, errors,
-  and routers.
-- `backend/app/core` owns environment-backed settings and structured request
-  validation errors.
-- `backend/app/api` owns HTTP routes. Only health is implemented.
-- `backend/app/services` owns business services. Health response construction
-  is the initial example.
-- `backend/app/repositories` and `backend/app/models` are intentionally empty
-  boundaries for domain agents.
-- `backend/app/db/session.py` owns the async SQLAlchemy engine and session
-  dependency. It is compatible with PostgreSQL/PostGIS via `asyncpg`.
+- `backend/app/schemas/routes.py` defines validated coordinates, route modes,
+  provider-neutral geometry, route candidates, route responses, and future
+  destination suggestions.
+- `backend/app/providers/routing.py` defines `RoutingProvider` and
+  `GeocodingProvider` protocols, normalized `ProviderRoute`, and explicit
+  provider error types.
+- `backend/app/services/routes.py` calls a provider and normalizes results into
+  Nivara-owned `RouteResponse` objects.
+- `backend/app/api/routes/routes.py` exposes `POST /api/v1/routes` and maps
+  provider failures to `503` without leaking implementation details.
+- `UnconfiguredRoutingProvider` is the current development default. It fails
+  explicitly; it does not fabricate routes.
 
 Frontend:
 
-- Next.js App Router + TypeScript + Tailwind CSS.
-- `frontend/components/ui` is shadcn-compatible shared UI space.
-- `frontend/lib/api.ts` owns the API base URL configuration.
-- `frontend/app/page.tsx` is only a minimal application shell.
+- `frontend/lib/navigation.ts` defines the frontend route contract and API
+  client without exposing map credentials.
+- `frontend/app/page.tsx` provides the minimum navigation shell: map surface
+  placeholder, browser geolocation, coordinate-based destination input, route
+  mode selection, loading/error states, and normalized route result rendering.
+- Destination search is intentionally not implemented until a geocoding
+  provider adapter is selected.
 
-Database:
+## Safety Integration Boundary
 
-- `docker-compose.yml` provides local PostgreSQL 16 with PostGIS 3.4.
-- No migrations or domain tables exist yet; the next database-owning feature
-  should introduce them deliberately.
+The route contract includes an optional `safety_assessment` field so future
+navigation work can enrich normalized candidates with the existing
+`IncidentSignalContext -> SafetyEngine -> SafetyAssessment` flow. T010 does not
+collect incidents, invoke the Safety Engine, compare routes, or optimize modes.
 
-## Files Created or Modified
+The Safety Engine remains database-independent and is not called from route
+handlers.
 
-- `backend/` FastAPI package, dependency metadata, README, and health tests
-- `frontend/` Next.js application, Tailwind config, UI primitive, and shell
-- `docker-compose.yml`
-- `.env.example`
-- `docs/tasks.md`, `docs/api.md`, `docs/architecture.md`, `docs/decisions.md`
-- this handoff document
+## API
+
+Implemented:
+
+- `POST /api/v1/routes`
+
+The request accepts origin, destination, and `fastest`, `balanced`, or
+`safety_priority` mode. The response contains normalized route candidates. If
+the routing provider is not configured, the endpoint returns `503` with
+`routing_provider_unavailable`.
+
+No route data is mocked in the application path.
 
 ## Verification Performed
 
 - `python3 -m pip install -e '.[test]' --user` from `backend/` — passed
-- `pytest -q` from `backend/` — passed, 2 tests
-- `uvicorn app.main:app --host 127.0.0.1 --port 8000` — app started successfully
-- The environment disallowed a separate `curl` socket request; ASGI smoke
-  tests use in-process HTTP transport instead.
-- `pnpm install` from `frontend/` — passed
+- `pytest -q` from `backend/` — passed, 34 tests
+- `python3 -m compileall -q app` — passed
+- `git diff --check` — passed
 - `pnpm typecheck` from `frontend/` — passed
 - `pnpm build` from `frontend/` — passed
-- `pnpm start` from `frontend/` — blocked by the sandbox refusing a local
-  port bind (`EPERM` on `0.0.0.0:3000`), not by a build or application error.
+
+Backend provider tests use an in-process fake provider. No live map/routing
+provider integration was run or claimed.
 
 ## Environment Variables
 
-See `.env.example`: `APP_ENV`, `APP_DEBUG`, `CORS_ORIGINS`, `DATABASE_URL`,
-optional map/AI/notification credentials, and `NEXT_PUBLIC_API_URL`.
-
-Never commit `.env` or real credentials.
+`MAP_API_KEY` already exists in `.env.example` for a future selected adapter.
+It is not exposed to the frontend and is not used by the unconfigured provider.
+No additional provider-specific variables were added.
 
 ## Known Limitations
 
-- No authentication, migrations, domain models, map provider, or feature APIs.
-- The health endpoint reports that the database URL is configured; it does not
-  perform a database connectivity probe.
-- Local PostGIS requires Docker/Compose to be available.
-- This sandbox disallows local TCP port binding for the Next.js server and
-  external `curl`; normal local development environments should not have that
-  restriction.
+- No concrete map/routing provider adapter is selected or configured.
+- No live map tiles or external geocoding/search.
+- Destination entry currently accepts latitude/longitude rather than place
+  search.
+- Route modes are validated and carried through the contract but do not yet
+  implement fastest/balanced/safety-priority optimization.
+- Route candidates are not yet enriched with incident-derived assessments.
+- The map surface is a frontend shell, not a custom map engine.
 
 ## Exact Next Task
 
-T010 — Map integration, after the safety and incident ownership agents have
-agreed on the route/indicator contract. The immediate foundation follow-up is
-to add database migrations only when the first domain model is ready.
+T013 — Select and implement one concrete external routing provider adapter,
+including provider response normalization and a safe development configuration.
+Then a later agent can implement route comparison and Safety Engine enrichment.

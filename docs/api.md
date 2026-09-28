@@ -46,6 +46,28 @@ Potential output:
 - geometry
 - safety indicators
 
+Implemented contract: `POST /api/v1/routes`
+
+Request body:
+
+```json
+{
+  "origin": {"latitude": 12.9716, "longitude": 77.5946},
+  "destination": {"latitude": 12.9352, "longitude": 77.6245},
+  "mode": "fastest"
+}
+```
+
+Supported modes are `fastest`, `balanced`, and `safety_priority`. The current
+foundation validates the mode and coordinates and normalizes provider results
+to Nivara-owned route objects containing route ID, origin, destination,
+distance, duration, provider-neutral geometry, provider metadata, and an
+optional future `safety_assessment`.
+
+If no concrete external provider adapter is configured, the endpoint returns
+`503` with a structured `routing_provider_unavailable` error. It never returns
+fabricated route data.
+
 ---
 
 GET /routes/{route_id}
@@ -82,6 +104,22 @@ Purpose:
 
 Retrieve incidents near a location or within a spatial region.
 
+Implemented contract: `GET /api/v1/incidents`
+
+Supported query parameters:
+
+- `category`: `harassment`, `theft`, `suspicious_activity`, `poor_lighting`, `unsafe_isolated_area`, or `other`
+- `severity`: `low`, `medium`, or `high`
+- `status`: `unverified`, `corroborated`, `validated`, or `rejected`
+- `confidence_level`: `unverified`, `corroborated`, or `higher_confidence`
+- `occurred_from` and `occurred_to`: timezone-aware ISO timestamps
+- `latitude`, `longitude`, and `radius_meters`: provide all three for a PostGIS radius query; radius is limited to 25–10,000 metres
+- `limit`: 1–100, default 50
+
+Responses contain public incident context only: location, category, description,
+timestamps, severity, source, status, and explainable confidence details.
+Reporter identity is not part of the incident response.
+
 ---
 
 POST /incidents/reports
@@ -90,6 +128,26 @@ Purpose:
 
 Submit a community incident report.
 
+Implemented contract: `POST /api/v1/incidents/reports`
+
+Request body:
+
+```json
+{
+  "category": "harassment",
+  "description": "A description with at least ten characters.",
+  "latitude": 12.9716,
+  "longitude": 77.5946,
+  "occurred_at": "2026-09-28T18:30:00Z",
+  "severity": "medium"
+}
+```
+
+`occurred_at` is optional and defaults to the server time. It must be
+timezone-aware and not in the future. Community reports are initially marked
+`unverified` with confidence factors explaining that they are single reports
+not yet corroborated. The API returns `201 Created`.
+
 ---
 
 GET /incidents/{incident_id}
@@ -97,6 +155,9 @@ GET /incidents/{incident_id}
 Purpose:
 
 Retrieve a specific incident.
+
+Implemented contract: `GET /api/v1/incidents/{incident_id}`. Missing incidents
+return `404`.
 
 ---
 

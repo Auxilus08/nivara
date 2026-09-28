@@ -271,6 +271,12 @@ Fastest / Balanced / Safety Priority
     ->
 User
 
+The navigation foundation keeps external routing behind
+`backend/app/providers/routing.py`. `RoutingService` consumes the provider
+protocol and returns normalized Nivara route contracts. Provider-specific
+response formats do not cross into API or frontend code. A concrete provider
+adapter is intentionally not selected yet.
+
 ---
 
 ## 11. Safe Trip Data Flow

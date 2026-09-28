@@ -1,7 +1,9 @@
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
-from app.api.router import api_router
+from app.api.routes.health import router as health_router
+from app.api.routes.incidents import router as incidents_router
+from app.api.routes.routes import router as routes_router
 from app.core.config import get_settings
 from app.core.errors import register_exception_handlers
 
@@ -24,7 +26,12 @@ def create_app() -> FastAPI:
         allow_headers=["*"],
     )
     register_exception_handlers(app)
-    app.include_router(api_router)
+    # Include concrete routers at the application boundary. This avoids
+    # retaining nested router wrappers in FastAPI versions that do not flatten
+    # them during ASGI dispatch.
+    app.include_router(health_router)
+    app.include_router(incidents_router)
+    app.include_router(routes_router)
     return app
 
 
