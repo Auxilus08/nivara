@@ -11,13 +11,13 @@ Status values:
 
 # Foundation
 
-- [ ] T001 Repository foundation
-- [ ] T002 Frontend foundation
-- [ ] T003 Backend foundation
-- [ ] T004 Database foundation
-- [ ] T005 Configuration/environment foundation
-- [ ] T006 API foundation
-- [ ] T007 Testing foundation
+- [x] T001 Repository foundation
+- [x] T002 Frontend foundation
+- [x] T003 Backend foundation
+- [x] T004 Database foundation
+- [x] T005 Configuration/environment foundation
+- [x] T006 API foundation
+- [x] T007 Testing foundation
 
 ---
 

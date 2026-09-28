@@ -12,9 +12,14 @@ The exact request and response schemas must be maintained by the implementation 
 
 GET /health
 
+GET /api/v1/health
+
 Purpose:
 
 Verify that the backend is running.
+
+The versioned endpoint is the preferred contract for clients. `/health` remains
+available as a simple infrastructure probe.
 
 ---
 

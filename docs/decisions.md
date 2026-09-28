@@ -128,3 +128,20 @@ Agents should work on scoped tasks and avoid unrelated changes.
 Reason:
 
 Reduces merge conflicts and architectural drift.
+
+---
+
+## ADR-011: Runnable foundation boundaries
+
+Decision:
+
+Use a small FastAPI application factory with versioned routers, Pydantic
+settings, SQLAlchemy async session wiring, and a Next.js App Router shell.
+Expose both `/api/v1/health` for clients and `/health` for infrastructure
+probes.
+
+Reason:
+
+This keeps feature agents independent at the API/service/repository boundaries
+while allowing the application and frontend to run before feature integrations
+or a local database are available.

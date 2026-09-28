@@ -73,6 +73,15 @@ Repositories
     v
 PostgreSQL + PostGIS
 
+The runnable foundation is split into `backend/app/api`, `services`,
+`repositories`, `models`, and `db`. `backend/app/db/session.py` owns the
+SQLAlchemy async engine/session boundary; feature agents should inject the
+session into repositories rather than opening connections in route handlers.
+
+The frontend foundation uses the Next.js App Router. Shared UI primitives live
+under `frontend/components/ui`, API configuration under `frontend/lib`, and
+feature UI should be added without placing domain logic in `app/page.tsx`.
+
 ---
 
 ## 4. Backend Layering
