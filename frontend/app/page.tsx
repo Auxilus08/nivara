@@ -37,6 +37,12 @@ function formatMode(mode: RouteMode) {
   return mode === "safety_priority" ? "Safety Priority" : mode[0].toUpperCase() + mode.slice(1);
 }
 
+function describeMode(mode: RouteMode) {
+  if (mode === "fastest") return "Prioritizes shorter travel time while retaining available safety indicators.";
+  if (mode === "balanced") return "Balances travel time with contextual incident indicators.";
+  return "Gives greater weight to lower estimated incident risk while retaining reasonable travel time.";
+}
+
 export default function HomePage() {
   const [currentLocation, setCurrentLocation] = useState<Coordinate | null>(null);
   const [destination, setDestination] = useState("");
@@ -141,6 +147,7 @@ export default function HomePage() {
                     <option value="balanced">Balanced</option>
                     <option value="safety_priority">Safety priority</option>
                   </select>
+                  <p className="mt-1 text-xs text-slate-500">{describeMode(mode)}</p>
                 </div>
                 <button type="submit" disabled={isRouting} className="w-full rounded-xl bg-indigo-600 px-4 py-3 text-sm font-semibold text-white disabled:cursor-wait disabled:opacity-60">{isRouting ? "Requesting route…" : "Request route"}</button>
               </form>

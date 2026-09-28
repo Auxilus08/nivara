@@ -93,6 +93,12 @@ where `normalized_travel_score = duration / maximum_candidate_duration * 100`.
 Lower cost is the configured selection objective, not an objective safety
 claim.
 
+For `mode: "fastest"`, the configured objective is to prioritize shorter
+travel time using weights of `time=0.90` and `safety=0.10`. Available
+`safety_assessment` data remains visible in the response; FASTEST does not
+discard contextual incident indicators. This is a user-selected travel-time
+objective, not a guarantee that the route is objectively fastest or safest.
+
 ---
 
 GET /routes/{route_id}

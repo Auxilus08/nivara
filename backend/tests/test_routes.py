@@ -3,6 +3,7 @@ import pytest
 from pydantic import ValidationError
 
 from app.main import app
+from app.api.routes.routes import get_routing_service
 from app.providers.routing import (
     OpenRouteServiceProvider,
     ProviderRoute,
@@ -71,6 +72,69 @@ async def test_routing_service_normalizes_provider_response():
     assert route.geometry is not None
     assert route.provider_metadata == {"profile": "balanced"}
     assert route.safety_assessment is None
+
+
+@pytest.mark.asyncio
+async def test_fastest_route_response_preserves_mode_and_safety_assessment():
+    class ContextProvider:
+        async def get_route_contextual_signals(self, *, geometry, corridor_radius_meters):
+            from app.schemas.incident import IncidentSignalContext
+            from datetime import datetime, timezone
+
+            return IncidentSignalContext(
+                latitude=12.95,
+                longitude=77.60,
+                radius_meters=corridor_radius_meters,
+                as_of=datetime.now(timezone.utc),
+                incident_count=1,
+                recent_incident_count=1,
+                severity_counts={"medium": 1},
+                category_counts={"theft": 1},
+                confidence_level_counts={"unverified": 1},
+                indicator_notes=["route corridor context"],
+            )
+
+    response = await RoutingService(
+        FakeRoutingProvider(), context_provider=ContextProvider()
+    ).calculate_routes(
+        RouteRequest(origin=ORIGIN, destination=DESTINATION, mode=RouteMode.FASTEST)
+    )
+
+    assert response.mode == RouteMode.FASTEST
+    assert response.selected_route_id == "fake-provider:candidate-1"
+    assert response.routes[0].safety_assessment is not None
+    assert response.routes[0].normalized_travel_score == 100
+    assert response.routes[0].comparison_cost is not None
+    assert "not a guarantee of safety" in response.comparison_explanation
+
+
+@pytest.mark.asyncio
+async def test_route_api_accepts_fastest_mode_and_returns_comparison_contract():
+    async def override_service():
+        return RoutingService(FakeRoutingProvider())
+
+    app.dependency_overrides[get_routing_service] = override_service
+    try:
+        transport = httpx.ASGITransport(app=app)
+        async with httpx.AsyncClient(transport=transport, base_url="http://test") as client:
+            response = await client.post(
+                "/api/v1/routes",
+                json={
+                    "origin": ORIGIN.model_dump(),
+                    "destination": DESTINATION.model_dump(),
+                    "mode": "fastest",
+                },
+            )
+    finally:
+        app.dependency_overrides.clear()
+
+    body = response.json()
+    assert response.status_code == 200
+    assert body["mode"] == "fastest"
+    assert body["selected_route_id"] == "fake-provider:candidate-1"
+    assert body["routes"][0]["estimated_duration_seconds"] == 900
+    assert body["routes"][0]["normalized_travel_score"] == 100
+    assert body["routes"][0]["comparison_cost"] == 100
 
 
 @pytest.mark.asyncio

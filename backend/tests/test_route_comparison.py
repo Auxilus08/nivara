@@ -6,7 +6,11 @@ from app.providers.routing import ProviderRoute
 from app.schemas.incident import IncidentSignalContext
 from app.schemas.routes import Coordinate, RouteGeometry, RouteMode, RouteRequest
 from app.services.routes import RoutingService
-from app.services.route_comparison import RouteComparisonService
+from app.services.route_comparison import (
+    DEFAULT_MODE_WEIGHTS,
+    MODE_DESCRIPTIONS,
+    RouteComparisonService,
+)
 from app.services.safety import SafetyEngine
 
 
@@ -56,6 +60,71 @@ def test_comparison_normalizes_time_and_selects_deterministically():
     assert enriched[0].comparison_cost == 100
     assert enriched[1].comparison_cost == 50
     assert service.compare(routes, RouteMode.FASTEST) == (enriched, selected)
+
+
+def test_fastest_mode_uses_documented_dominant_time_weight():
+    weights = DEFAULT_MODE_WEIGHTS[RouteMode.FASTEST]
+
+    assert weights.time == 0.90
+    assert weights.safety == 0.10
+    assert weights.time > weights.safety
+    assert "shorter travel time" in MODE_DESCRIPTIONS[RouteMode.FASTEST]
+
+
+def test_fastest_prefers_shorter_route_even_when_it_has_higher_risk():
+    engine = SafetyEngine()
+    shorter_high_risk = candidate("shorter", 60, engine.assess(context(8)))
+    longer_lower_risk = candidate("longer", 120, engine.assess(context(1)))
+
+    routes, selected = RouteComparisonService().compare(
+        [shorter_high_risk, longer_lower_risk], RouteMode.FASTEST
+    )
+
+    assert selected == "shorter"
+    assert routes[0].comparison_cost == pytest.approx(
+        0.90 * routes[0].normalized_travel_score
+        + 0.10 * shorter_high_risk.safety_assessment.risk_score,
+        abs=0.01,
+    )
+    assert routes[1].comparison_cost == pytest.approx(
+        0.90 * routes[1].normalized_travel_score
+        + 0.10 * longer_lower_risk.safety_assessment.risk_score,
+        abs=0.01,
+    )
+
+
+def test_fastest_same_duration_uses_lower_safety_score():
+    engine = SafetyEngine()
+    higher_risk = candidate("higher-risk", 90, engine.assess(context(8)))
+    lower_risk = candidate("lower-risk", 90, engine.assess(context(1)))
+
+    _, selected = RouteComparisonService().compare(
+        [higher_risk, lower_risk], RouteMode.FASTEST
+    )
+
+    assert selected == "lower-risk"
+
+
+def test_fastest_identical_candidates_use_stable_route_id_tie_breaker():
+    routes, selected = RouteComparisonService().compare(
+        [candidate("route-b", 90), candidate("route-a", 90)], RouteMode.FASTEST
+    )
+
+    assert selected == "route-a"
+    assert routes[0].comparison_cost == routes[1].comparison_cost
+
+
+def test_fastest_single_candidate_is_selected_and_keeps_assessment():
+    assessment = SafetyEngine().assess(context(1))
+    routes, selected = RouteComparisonService().compare(
+        [candidate("only-route", 90, assessment)], RouteMode.FASTEST
+    )
+
+    assert selected == "only-route"
+    assert routes[0].safety_assessment == assessment
+    assert routes[0].comparison_cost == pytest.approx(
+        0.90 * routes[0].normalized_travel_score + 0.10 * assessment.risk_score
+    )
 
 
 def test_mode_weights_change_selection_using_safety_assessments():

@@ -3,8 +3,9 @@
 ## Current Status
 
 Foundation, incident domain, deterministic Safety Engine, provider-neutral
-navigation foundation, the first concrete external routing adapter, and route
-comparison with incident-derived safety enrichment are implemented. No live
+navigation foundation, the first concrete external routing adapter, route
+comparison with incident-derived safety enrichment, and the explicit FASTEST
+mode experience are implemented. No live
 provider key or live PostGIS database is configured in this environment.
 
 ## Last Completed Tasks
@@ -22,6 +23,7 @@ provider key or live PostGIS database is configured in this environment.
 - T014 Route normalization
 - T015 Safety scoring
 - T016 Route comparison
+- T017 Fastest mode
 - T030 Incident model
 - T031 Incident listing
 - T032 Incident spatial queries
@@ -30,7 +32,7 @@ provider key or live PostGIS database is configured in this environment.
 - T035 Confidence model
 - T036 Incident filtering
 
-T012 destination search and T017–T020 route modes/heatmap remain incomplete.
+T012 destination search and T018–T020 route modes/heatmap remain incomplete.
 
 ## Navigation Architecture
 
@@ -95,6 +97,10 @@ Weights are FASTEST 0.90/0.10, BALANCED 0.55/0.45, and SAFETY_PRIORITY
 0.25/0.75 for time/safety. These are contextual selection estimates, not
 guarantees of safety.
 
+FASTEST is explicitly described as prioritizing shorter travel time while
+retaining available safety indicators. Comparison ties use lower duration, then
+lexicographically lower `route_id`, after comparison cost.
+
 ## API
 
 Implemented:
@@ -114,7 +120,7 @@ unavailable; missing context is never treated as zero risk.
 ## Verification Performed
 
 - `python3 -m pip install -e '.[test]' --user` from `backend/` — passed
-- `pytest -q` from `backend/` — passed, 46 tests
+- `pytest -q` from `backend/` — passed, 53 tests
 - `python3 -m compileall -q app` — passed
 - `git diff --check` — passed
 - `pnpm typecheck` from `frontend/` — passed
@@ -140,6 +146,6 @@ integration was run or claimed because no credential was configured.
 
 ## Exact Next Task
 
-T017–T019 — Harden and demonstrate the distinct fastest, balanced, and safety-
-priority route experiences using the existing comparison service. Do not move
-provider-specific logic or unsupported safety claims into those layers.
+T018 — Validate the BALANCED mode experience using the existing comparison
+service. Preserve provider-neutral contracts and contextual, non-guaranteed
+safety language.

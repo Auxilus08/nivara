@@ -243,3 +243,24 @@ This creates the first route-selection vertical slice without changing the
 deterministic SafetyEngine or coupling it to SQL/PostGIS/provider formats.
 The result remains an estimate based on available data and is not a guarantee
 of safety.
+
+---
+
+## ADR-017: FASTEST mode semantics
+
+Decision:
+
+Define FASTEST as the route-selection objective with time weight `0.90` and
+safety weight `0.10`. It uses the same normalized travel-time and contextual
+risk formula as the other modes, so available `SafetyAssessment` data remains
+visible even when travel time dominates selection.
+
+For equal comparison costs, selection is deterministic: lower estimated
+duration wins, then lexicographically lower `route_id`. FASTEST describes the
+configured objective; it does not claim an objectively fastest, shortest, or
+safe route.
+
+Reason:
+
+Users need a clear travel-time-oriented mode without losing contextual safety
+information or introducing nondeterministic route selection.
