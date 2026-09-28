@@ -4,6 +4,8 @@ import { FormEvent, useState } from "react";
 import { LocateFixed, Map, ShieldCheck } from "lucide-react";
 
 import { Card, CardContent } from "@/components/ui/card";
+import { IncidentPanel } from "@/components/incidents/incident-panel";
+import { searchDestinations, type DestinationSuggestion } from "@/lib/geocoding";
 import {
   calculateRoutes,
   calculateHeatmap,
@@ -18,23 +20,6 @@ import {
 function formatCoordinate(coordinate: Coordinate | null) {
   if (!coordinate) return "Location not selected";
   return `${coordinate.latitude.toFixed(5)}, ${coordinate.longitude.toFixed(5)}`;
-}
-
-function parseDestination(value: string): Coordinate | null {
-  const [latitudeText, longitudeText] = value.split(",").map((part) => part.trim());
-  const latitude = Number(latitudeText);
-  const longitude = Number(longitudeText);
-  if (
-    !Number.isFinite(latitude) ||
-    !Number.isFinite(longitude) ||
-    latitude < -90 ||
-    latitude > 90 ||
-    longitude < -180 ||
-    longitude > 180
-  ) {
-    return null;
-  }
-  return { latitude, longitude };
 }
 
 function formatMode(mode: RouteMode) {
@@ -65,7 +50,11 @@ function heatmapColor(point: HeatmapPoint) {
 
 export default function HomePage() {
   const [currentLocation, setCurrentLocation] = useState<Coordinate | null>(null);
-  const [destination, setDestination] = useState("");
+  const [destinationQuery, setDestinationQuery] = useState("");
+  const [destination, setDestination] = useState<Coordinate | null>(null);
+  const [destinationSuggestions, setDestinationSuggestions] = useState<DestinationSuggestion[]>([]);
+  const [isSearchingDestination, setIsSearchingDestination] = useState(false);
+  const [destinationSearchError, setDestinationSearchError] = useState<string | null>(null);
   const [mode, setMode] = useState<RouteMode>("fastest");
   const [routeResponse, setRouteResponse] = useState<RouteResponse | null>(null);
   const [isLocating, setIsLocating] = useState(false);
@@ -121,22 +110,57 @@ export default function HomePage() {
     }
   }
 
+  async function handleDestinationSearch() {
+    setDestinationSearchError(null);
+    setDestination(null);
+    if (destinationQuery.trim().length < 2) {
+      setDestinationSearchError("Enter a destination to search.");
+      return;
+    }
+    setIsSearchingDestination(true);
+    try {
+      const response = await searchDestinations(destinationQuery);
+      setDestinationSuggestions(response.results);
+      if (response.results.length === 0) setDestinationSearchError("No destinations found.");
+    } catch (searchError) {
+      setDestinationSuggestions([]);
+      setDestinationSearchError(
+        searchError instanceof Error ? searchError.message : "Destination search is temporarily unavailable.",
+      );
+    } finally {
+      setIsSearchingDestination(false);
+    }
+  }
+
+  function selectDestination(suggestion: DestinationSuggestion) {
+    setDestination(suggestion.coordinate);
+    setDestinationQuery(suggestion.label);
+    setDestinationSuggestions([]);
+    setDestinationSearchError(null);
+  }
+
+  function clearDestination() {
+    setDestination(null);
+    setDestinationQuery("");
+    setDestinationSuggestions([]);
+    setDestinationSearchError(null);
+  }
+
   async function submitRoute(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     setError(null);
     setRouteResponse(null);
-    const parsedDestination = parseDestination(destination);
     if (!currentLocation) {
       setError("Select your current location before requesting a route.");
       return;
     }
-    if (!parsedDestination) {
-      setError("Enter a destination as latitude, longitude.");
+    if (!destination) {
+      setError("Please select a destination before requesting a route.");
       return;
     }
     setIsRouting(true);
     try {
-      setRouteResponse(await calculateRoutes(currentLocation, parsedDestination, mode));
+      setRouteResponse(await calculateRoutes(currentLocation, destination, mode));
     } catch (routeError) {
       setError(routeError instanceof Error ? routeError.message : "Route lookup failed.");
     } finally {
@@ -205,9 +229,17 @@ export default function HomePage() {
               <p className="mt-3 text-sm leading-6 text-slate-600">Route estimates will be enriched with contextual safety indicators. They are not guarantees of what will happen.</p>
               <form className="mt-6 space-y-4" onSubmit={submitRoute}>
                 <div>
-                  <label className="text-sm font-medium" htmlFor="destination">Destination coordinates</label>
-                  <input id="destination" value={destination} onChange={(event) => setDestination(event.target.value)} placeholder="12.9352, 77.6245" className="mt-2 w-full rounded-xl border border-slate-200 bg-white px-3 py-2.5 text-sm outline-none ring-indigo-200 focus:ring-2" />
-                  <p className="mt-1 text-xs text-slate-500">Geocoded destination search will use the provider adapter when selected.</p>
+                  <label className="text-sm font-medium" htmlFor="destination">Search destination</label>
+                  <div className="mt-2 flex gap-2">
+                    <input id="destination" value={destinationQuery} onChange={(event) => { setDestinationQuery(event.target.value); setDestination(null); setDestinationSuggestions([]); setDestinationSearchError(null); }} onKeyDown={(event) => { if (event.key === "Enter") { event.preventDefault(); void handleDestinationSearch(); } }} placeholder="Search for a place or address" className="min-w-0 flex-1 rounded-xl border border-slate-200 bg-white px-3 py-2.5 text-sm outline-none ring-indigo-200 focus:ring-2" />
+                    <button type="button" onClick={() => void handleDestinationSearch()} disabled={isSearchingDestination} className="rounded-xl border border-indigo-200 px-3 py-2 text-sm font-medium text-indigo-700 disabled:opacity-50">{isSearchingDestination ? "Searching…" : "Search"}</button>
+                  </div>
+                  {destinationSearchError && <p role="alert" className="mt-2 text-xs text-rose-700">{destinationSearchError}</p>}
+                  {destinationSuggestions.length > 0 && <div className="mt-2 space-y-2 rounded-xl border border-slate-200 bg-white p-2" aria-label="Destination search results">
+                    {destinationSuggestions.map((suggestion) => <button type="button" key={suggestion.suggestion_id} onClick={() => selectDestination(suggestion)} className="block w-full rounded-lg px-3 py-2 text-left text-sm text-slate-700 hover:bg-indigo-50 focus:outline-none focus:ring-2 focus:ring-indigo-300">{suggestion.label}</button>)}
+                  </div>}
+                  {destination && <div className="mt-2 flex items-center justify-between rounded-lg bg-emerald-50 px-3 py-2 text-xs text-emerald-800"><span>Selected destination: {destinationQuery}</span><button type="button" onClick={clearDestination} className="font-medium underline">Clear</button></div>}
+                  <p className="mt-1 text-xs text-slate-500">Select a result before requesting a route.</p>
                 </div>
                 <div className="flex items-center justify-between rounded-xl bg-slate-50 px-3 py-2.5 text-sm">
                   <span className="text-slate-600">{formatCoordinate(currentLocation)}</span>
@@ -228,6 +260,8 @@ export default function HomePage() {
             </CardContent>
           </Card>
         </section>
+
+        <IncidentPanel currentLocation={currentLocation} />
 
         {routeResponse && (
           <Card>

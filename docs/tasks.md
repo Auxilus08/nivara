@@ -25,7 +25,7 @@ Status values:
 
 - [x] T010 Map integration
 - [x] T011 Current location
-- [ ] T012 Destination search
+- [x] T012 Destination search
 - [x] T013 Routing integration
 - [x] T014 Route normalization
 - [x] T015 Safety scoring
@@ -46,7 +46,7 @@ Status values:
 - [x] T034 Community report validation
 - [x] T035 Confidence model
 - [x] T036 Incident filtering
-- [ ] T037 Incident UI
+- [x] T037 Incident UI
 
 ---
 

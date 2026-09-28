@@ -328,3 +328,23 @@ introducing a second frontend score or a database dependency in that engine.
 Coarse aggregation provides contextual indicators for the hackathon UI while
 preserving non-guaranteed safety language and avoiding reporter or raw incident
 data exposure.
+
+---
+
+## ADR-021: Server-side destination geocoding
+
+Decision:
+
+Use the existing `GeocodingProvider` abstraction and the current
+OpenRouteService/HeiGIT forward geocoding endpoint at `/pelias/v1/search`.
+Expose it through
+`GET /api/v1/geocoding/search`, validate and bound the query in the API layer,
+and normalize responses into Nivara-owned `DestinationSuggestion` objects.
+The existing server-side `ROUTING_API_KEY` is sent only from the backend.
+
+Reason:
+
+Destination search is an external integration and must not couple the frontend
+to provider payloads or expose credentials. A bounded explicit search action is
+sufficient for the current navigation shell without adding autocomplete
+traffic or a second geocoding abstraction.

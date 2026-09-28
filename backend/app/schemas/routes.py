@@ -73,3 +73,8 @@ class DestinationSuggestion(BaseModel):
     suggestion_id: str
     label: str
     coordinate: Coordinate
+
+
+class DestinationSearchResponse(BaseModel):
+    results: list[DestinationSuggestion]
+    count: int = Field(ge=0)

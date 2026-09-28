@@ -122,6 +122,45 @@ Retrieve a previously generated route.
 
 ---
 
+## Geocoding
+
+GET /geocoding/search
+
+Implemented contract: `GET /api/v1/geocoding/search?q={query}`
+
+Searches for a destination using the configured server-side geocoding
+provider. `q` is required, must contain at least two non-whitespace characters,
+and is limited to 200 characters. The backend returns at most five results.
+
+Response:
+
+```json
+{
+  "results": [
+    {
+      "suggestion_id": "provider-result-id",
+      "label": "Example Place, Bengaluru",
+      "coordinate": {"latitude": 12.9716, "longitude": 77.5946}
+    }
+  ],
+  "count": 1
+}
+```
+
+The frontend receives only Nivara-owned destination suggestions. Provider
+credentials and raw provider payloads remain server-side. Empty searches return
+`422`; no provider matches return `200` with an empty result list. Provider
+configuration failures return `503`, rate limits return `429`, timeouts return
+`504`, and provider HTTP or malformed-response failures return `502`.
+
+The current concrete adapter uses the OpenRouteService/HeiGIT forward
+geocoding endpoint `GET https://api.heigit.org/pelias/v1/search`, with the
+existing server-side `ROUTING_API_KEY` sent in the `Authorization` header. It
+passes only the normalized search text and a bounded result size to the
+provider. This is separate from the existing directions base URL.
+
+---
+
 ## Safety
 
 GET /safety/score

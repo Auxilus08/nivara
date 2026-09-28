@@ -7,8 +7,9 @@ navigation foundation, the first concrete external routing adapter, route
 comparison with incident-derived safety enrichment, the explicit FASTEST mode
 experience, the explicit BALANCED mode experience, the explicit
 SAFETY_PRIORITY mode experience, and the first bounded contextual safety
-heatmap are implemented. No live provider key or live PostGIS database is
-configured in this environment.
+heatmap are implemented. The frontend incident reporting, browsing/filtering,
+and detail experience is also implemented. No live provider key or live
+PostGIS database is configured in this environment.
 
 ## Last Completed Tasks
 
@@ -21,6 +22,7 @@ configured in this environment.
 - T007 Testing foundation
 - T010 Map integration foundation
 - T011 Current location
+- T012 Destination search
 - T013 Routing integration
 - T014 Route normalization
 - T015 Safety scoring
@@ -36,8 +38,10 @@ configured in this environment.
 - T034 Community report validation
 - T035 Confidence model
 - T036 Incident filtering
+- T037 Incident UI
 
-T012 destination search remains incomplete.
+The navigation foundation now accepts a selected geocoded destination; route
+comparison and safety enrichment remain unchanged.
 
 ## Navigation Architecture
 
@@ -61,8 +65,10 @@ Frontend:
 
 - `frontend/lib/navigation.ts` defines the frontend route contract and API
   client without exposing routing credentials.
+- `frontend/lib/geocoding.ts` defines the typed destination search client and
+  validates provider-neutral response shapes.
 - `frontend/app/page.tsx` provides the minimum navigation shell: map surface
-  placeholder, browser geolocation, coordinate-based destination input, route
+  placeholder, browser geolocation, destination search/selection, route
   mode selection, loading/error states, and normalized route result rendering.
 - Destination search is intentionally not implemented; the geocoding protocol
   remains available for a future provider adapter.
@@ -78,6 +84,32 @@ Frontend:
   contextual legend, loading/error/no-data states, and the canonical
   disclaimer. No map-rendering dependency was added because the repository has
   no existing map library and T020 does not require selecting one.
+
+## Incident UI
+
+- `frontend/lib/incidents.ts` contains typed incident enums, public response
+  validation, list filters, report submission, and incident detail API calls.
+- `frontend/components/incidents/incident-panel.tsx` provides the community
+  report form, validation and submission states, category/severity/status/
+  confidence/time filters, incident list, and detail view.
+- `frontend/app/page.tsx` mounts the incident panel without changing route
+  comparison or heatmap behavior. Exact coordinates are used only for the
+  existing API contract; displayed locations are rounded to approximate
+  coordinates and reporter identity is never requested or shown.
+
+## Destination Search
+
+- `backend/app/providers/routing.py` now implements the existing
+  `GeocodingProvider` protocol in `OpenRouteServiceProvider` using the
+  server-side HeiGIT `/pelias/v1/search` endpoint and normalizes GeoJSON point
+  results.
+- `backend/app/services/geocoding.py` bounds normalized queries and result
+  counts without knowing provider response details.
+- `backend/app/api/routes/geocoding.py` exposes
+  `GET /api/v1/geocoding/search` and maps configuration, timeout, rate-limit,
+  HTTP, and malformed-response failures to stable API errors.
+- The browser submits only search text and receives normalized labels and
+  coordinates. `ROUTING_API_KEY` is never exposed to Next.js.
 
 ## Provider Configuration
 
@@ -136,6 +168,10 @@ Implemented:
 
 - `POST /api/v1/routes`
 - `GET /api/v1/safety/heatmap`
+- `POST /api/v1/incidents/reports`
+- `GET /api/v1/incidents`
+- `GET /api/v1/incidents/{incident_id}`
+- `GET /api/v1/geocoding/search`
 
 If the routing key is missing or rejected, the endpoint returns a provider-
 neutral `503` configuration error. Rate limits return `429`, timeouts return
@@ -185,8 +221,13 @@ integration was run or claimed because no credential was configured.
 - Heatmap points are occupied coarse cells centered on aggregated incident
   locations; the frontend overlay is illustrative and does not provide map
   tiles or route selection.
+- The incident UI has no frontend test framework in the current repository;
+  type checking and the production build are the frontend verification.
+- No live OpenRouteService/HeiGIT geocoding request was performed because no
+  valid provider credential is configured.
 
 ## Exact Next Task
 
-T037 — Build the incident UI on top of the incident and heatmap API contracts,
-preserving contextual language and privacy boundaries.
+T100 — Integrate navigation, incident-derived safety context, and destination
+search into an end-to-end demonstration flow without introducing new provider
+coupling.

@@ -273,6 +273,22 @@ Fastest / Balanced / Safety Priority
     ->
 User
 
+Destination search follows a separate provider-neutral boundary:
+
+Frontend
+    ->
+`GET /api/v1/geocoding/search`
+    ->
+GeocodingService
+    ->
+GeocodingProvider
+    ->
+OpenRouteService geocoding API
+
+The service returns normalized `DestinationSuggestion` objects. Provider
+credentials and response formats do not reach the browser. Route calculation
+continues to receive only the selected normalized coordinate.
+
 The navigation foundation keeps external routing behind
 `backend/app/providers/routing.py`. `RoutingService` consumes the provider
 protocol and returns normalized Nivara route contracts. Provider-specific

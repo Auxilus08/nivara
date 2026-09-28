@@ -44,6 +44,36 @@ class RoutingProviderResponseError(RoutingProviderError):
     code = "routing_provider_response_error"
 
 
+class GeocodingProviderError(Exception):
+    """Base error for geocoding failures safe to map at the API boundary."""
+
+    code = "geocoding_provider_error"
+
+
+class GeocodingProviderUnavailable(GeocodingProviderError):
+    code = "geocoding_provider_unavailable"
+
+
+class GeocodingProviderConfigurationError(GeocodingProviderError):
+    code = "geocoding_provider_configuration_error"
+
+
+class GeocodingProviderRateLimited(GeocodingProviderError):
+    code = "geocoding_provider_rate_limited"
+
+
+class GeocodingProviderTimeout(GeocodingProviderError):
+    code = "geocoding_provider_timeout"
+
+
+class GeocodingProviderRequestFailed(GeocodingProviderError):
+    code = "geocoding_provider_request_failed"
+
+
+class GeocodingProviderResponseError(GeocodingProviderError):
+    code = "geocoding_provider_response_error"
+
+
 @dataclass(frozen=True)
 class ProviderRoute:
     """Normalized provider output expected from a concrete adapter."""
@@ -81,11 +111,24 @@ class UnconfiguredRoutingProvider:
         raise RoutingProviderUnavailable(self.message)
 
 
+class UnconfiguredGeocodingProvider:
+    name = "unconfigured"
+
+    def __init__(self, message: str | None = None):
+        self.message = message or "No external geocoding provider is configured for this environment."
+
+    async def search(
+        self, query: str, proximity: Coordinate | None = None
+    ) -> list[DestinationSuggestion]:
+        raise GeocodingProviderUnavailable(self.message)
+
+
 class OpenRouteServiceProvider:
     """Adapter for the openrouteservice Directions GeoJSON API."""
 
     name = "openrouteservice"
     default_base_url = "https://api.openrouteservice.org"
+    default_geocoding_base_url = "https://api.heigit.org"
     profile = "driving-car"
 
     def __init__(
@@ -93,11 +136,13 @@ class OpenRouteServiceProvider:
         api_key: str | None,
         *,
         base_url: str = default_base_url,
+        geocoding_base_url: str = default_geocoding_base_url,
         timeout_seconds: float = 10.0,
         client_factory=httpx.AsyncClient,
     ):
         self.api_key = api_key
         self.base_url = base_url.rstrip("/")
+        self.geocoding_base_url = geocoding_base_url.rstrip("/")
         self.timeout_seconds = timeout_seconds
         self.client_factory = client_factory
 
@@ -157,6 +202,55 @@ class OpenRouteServiceProvider:
             ) from exc
         return self._normalize_geojson(data)
 
+    async def search(
+        self, query: str, proximity: Coordinate | None = None
+    ) -> list[DestinationSuggestion]:
+        if not self.api_key:
+            raise GeocodingProviderConfigurationError(
+                "The geocoding provider API key is not configured."
+            )
+
+        params: dict[str, str | int | float] = {"text": query, "size": 5}
+        if proximity is not None:
+            params["focus.point.lat"] = proximity.latitude
+            params["focus.point.lon"] = proximity.longitude
+        headers = {
+            "Authorization": self.api_key,
+            "Accept": "application/json",
+        }
+        url = f"{self.geocoding_base_url}/pelias/v1/search"
+
+        try:
+            async with self.client_factory(timeout=self.timeout_seconds) as client:
+                response = await client.get(url, params=params, headers=headers)
+        except httpx.TimeoutException as exc:
+            raise GeocodingProviderTimeout("The geocoding provider request timed out.") from exc
+        except httpx.RequestError as exc:
+            raise GeocodingProviderRequestFailed(
+                "The geocoding provider request could not be completed."
+            ) from exc
+
+        if response.status_code == 401 or response.status_code == 403:
+            raise GeocodingProviderConfigurationError(
+                "The geocoding provider rejected the configured credentials."
+            )
+        if response.status_code == 429:
+            raise GeocodingProviderRateLimited(
+                "The geocoding provider rate limit was reached."
+            )
+        if response.status_code >= 400:
+            raise GeocodingProviderRequestFailed(
+                "The geocoding provider returned an HTTP error."
+            )
+
+        try:
+            data = response.json()
+        except ValueError as exc:
+            raise GeocodingProviderResponseError(
+                "The geocoding provider returned invalid JSON."
+            ) from exc
+        return self._normalize_geocoding(data)
+
     def _normalize_geojson(self, data: object) -> list[ProviderRoute]:
         if not isinstance(data, dict):
             raise RoutingProviderResponseError("The routing provider response shape was invalid.")
@@ -214,3 +308,50 @@ class OpenRouteServiceProvider:
                 )
             )
         return routes
+
+    def _normalize_geocoding(self, data: object) -> list[DestinationSuggestion]:
+        if not isinstance(data, dict):
+            raise GeocodingProviderResponseError("The geocoding provider response shape was invalid.")
+        features = data.get("features")
+        if not isinstance(features, list):
+            raise GeocodingProviderResponseError("The geocoding provider results were invalid.")
+
+        suggestions: list[DestinationSuggestion] = []
+        for index, feature in enumerate(features[:5]):
+            if not isinstance(feature, dict):
+                raise GeocodingProviderResponseError("The geocoding provider result was invalid.")
+            geometry = feature.get("geometry")
+            properties = feature.get("properties")
+            if (
+                not isinstance(geometry, dict)
+                or geometry.get("type") != "Point"
+                or not isinstance(properties, dict)
+            ):
+                raise GeocodingProviderResponseError("The geocoding provider result shape was invalid.")
+            coordinates = geometry.get("coordinates")
+            label = properties.get("label")
+            if (
+                not isinstance(coordinates, list)
+                or len(coordinates) < 2
+                or not isinstance(coordinates[0], (int, float))
+                or not isinstance(coordinates[1], (int, float))
+                or not isinstance(label, str)
+                or not label.strip()
+            ):
+                raise GeocodingProviderResponseError("The geocoding provider result fields were invalid.")
+            try:
+                coordinate = Coordinate(latitude=coordinates[1], longitude=coordinates[0])
+            except ValueError as exc:
+                raise GeocodingProviderResponseError(
+                    "The geocoding provider returned an out-of-range coordinate."
+                ) from exc
+            provider_id = feature.get("id")
+            suggestion_id = provider_id if isinstance(provider_id, str) and provider_id else f"geocode-{index}"
+            suggestions.append(
+                DestinationSuggestion(
+                    suggestion_id=suggestion_id,
+                    label=label.strip(),
+                    coordinate=coordinate,
+                )
+            )
+        return suggestions

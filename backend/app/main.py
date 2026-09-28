@@ -2,6 +2,7 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from app.api.routes.health import router as health_router
+from app.api.routes.geocoding import router as geocoding_router
 from app.api.routes.incidents import router as incidents_router
 from app.api.routes.routes import router as routes_router
 from app.api.routes.safety import router as safety_router
@@ -31,6 +32,7 @@ def create_app() -> FastAPI:
     # retaining nested router wrappers in FastAPI versions that do not flatten
     # them during ASGI dispatch.
     app.include_router(health_router)
+    app.include_router(geocoding_router)
     app.include_router(incidents_router)
     app.include_router(routes_router)
     app.include_router(safety_router)
