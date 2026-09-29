@@ -120,8 +120,8 @@ Status values:
 # Integration
 
 - [x] T100 Navigation integration
-- [ ] T101 Safety engine integration
-- [ ] T102 Community reports integration
+- [x] T101 Safety engine integration
+- [x] T102 Community reports integration
 - [ ] T103 Safe Trip integration
 - [ ] T104 Emergency integration
 - [ ] T105 Privacy integration

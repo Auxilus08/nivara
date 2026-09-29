@@ -40,6 +40,8 @@ PostGIS database is configured in this environment.
 - T036 Incident filtering
 - T037 Incident UI
 - T100 Navigation integration
+- T101 Safety engine integration
+- T102 Community reports integration
 
 The primary demonstration flow now connects browser location, destination
 search/selection, backend route comparison, contextual heatmap indicators, and
@@ -112,6 +114,9 @@ Frontend:
   and destination controls to avoid contradictory results.
 - Heatmap and incident errors remain isolated from route errors, so one
   unavailable service does not hide the other contextual UI.
+- After a successful community report, the incident panel can refresh an
+  active route comparison through the existing route API. The frontend does
+  not calculate or cache safety values.
 
 ## Destination Search
 
@@ -208,11 +213,63 @@ incident IDs, descriptions, reporter identity, or moderation fields. No-data
 cells are omitted and no score is fabricated for them. The visualization is
 contextual incident activity, not a prediction or guarantee of safety.
 
+## T101 Integration Validation
+
+`backend/tests/test_t101_integration.py` validates the internal route safety
+pipeline with a deterministic provider stub and controlled incident records.
+The test flow is:
+
+`RouteRequest -> RoutingProvider -> normalized route candidates -> route
+geometry -> IncidentService route-context contract -> IncidentSignalContext ->
+SafetyEngine -> SafetyAssessment -> RouteComparisonService -> RouteResponse`
+
+The fixture provides a shorter candidate with eight recent, higher-confidence
+high-severity indicators and a longer candidate with one recent, unverified
+low-severity indicator. An additional controlled incident is outside the
+fixture corridor results and is not included in either assessment. The real
+`IncidentService`, `SafetyEngine`, route comparison, and FastAPI route handler
+are exercised; route geometry and the configured 100 metre corridor are
+asserted at the repository boundary. FASTEST, BALANCED, and SAFETY_PRIORITY
+are validated through the API, including selected-route consistency,
+assessment propagation, contextual disclaimers, and the absence of incident
+private fields in route responses. A geometry-less provider case verifies that
+missing context remains explicit and is not treated as zero risk.
+
+This environment has no usable Docker/PostGIS service, so the integration
+tests do not execute the actual PostGIS query against a database. Existing
+repository tests still compile the production corridor query and verify its
+`ST_DWithin` and `ST_GeomFromText` operations. No live OpenRouteService request
+was made because no valid API key is configured.
+
+## T102 Community Reports Integration
+
+`IncidentRepository.create` now commits a newly submitted report before the
+request-scoped database session closes. This ensures a later request can see
+the report through the normal repository path. The existing report remains
+`unverified` with its existing confidence semantics.
+
+The frontend passes a report-success callback from the navigation page into
+the incident panel. If an active route exists, submission triggers a fresh
+`POST /api/v1/routes` request using the selected mode and refreshes the
+optional heatmap. If no route is active, the report remains available for the
+next route request without changing the navigation flow.
+
+`backend/tests/test_t102_integration.py` validates the report API, subsequent
+incident retrieval, all three route modes, fresh corridor context, updated
+SafetyEngine assessments, exclusion of an outside-corridor report, and route
+response privacy. It also verifies the repository commit boundary with a
+transaction-recording session. The test uses an in-process persistent fixture
+and deterministic routing provider because live PostGIS and OpenRouteService
+are unavailable; it does not claim live database or provider validation.
+
 ## Verification Performed
 
 - `python3 -m pip install -e '.[test]' --user` from `backend/` — passed
-- `pytest -q` from `backend/` — passed, 89 tests
-- `python -m compileall backend/app` — passed
+- `python3 -m pytest -q` from repository root — passed, 94 tests
+- `pytest -q tests/test_t101_integration.py` from `backend/` — passed, 5 tests
+- `pytest -q tests/test_t102_integration.py` from `backend/` — passed, 2 tests
+- `python3 -m pytest -q` after T102 changes — passed, 96 tests
+- `python3 -m compileall backend` — passed
 - `git diff --check` — passed
 - `pnpm typecheck` from `frontend/` — passed
 - `pnpm build` from `frontend/` — passed
@@ -242,6 +299,5 @@ integration was run or claimed because no credential was configured.
 
 ## Exact Next Task
 
-T101 — Validate the safety-engine integration end-to-end with configured
-incident data and route requests, without changing the deterministic scoring
-contract.
+T103 — Implement the Safe Trip model and creation flow while preserving the
+existing route, incident, and contextual safety contracts.

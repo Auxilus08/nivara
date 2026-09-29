@@ -23,6 +23,10 @@ class IncidentRepository:
     async def create(self, incident: Incident) -> Incident:
         self.session.add(incident)
         await self.session.flush()
+        # Reports must survive the request-scoped session so a later route
+        # request can include the newly submitted incident in its corridor
+        # query.
+        await self.session.commit()
         await self.session.refresh(incident)
         return incident
 

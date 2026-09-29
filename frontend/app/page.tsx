@@ -154,25 +154,34 @@ export default function HomePage() {
     await requestRoute(mode);
   }
 
-  async function requestRoute(routeMode: RouteMode) {
+  async function requestRoute(routeMode: RouteMode): Promise<boolean> {
     setError(null);
     setRouteResponse(null);
     if (!currentLocation) {
       setError("Select your current location before requesting a route.");
-      return;
+      return false;
     }
     if (!destination) {
       setError("Please select a destination before requesting a route.");
-      return;
+      return false;
     }
     setIsRouting(true);
     try {
       setRouteResponse(await calculateRoutes(currentLocation, destination, routeMode));
+      return true;
     } catch (routeError) {
       setError(routeError instanceof Error ? routeError.message : "Route lookup failed.");
+      return false;
     } finally {
       setIsRouting(false);
     }
+  }
+
+  async function refreshAfterReport(): Promise<boolean> {
+    if (!currentLocation || !destination || !routeResponse || isRouting) return false;
+    const refreshed = await requestRoute(mode);
+    if (heatmap) void loadHeatmap();
+    return refreshed;
   }
 
   function handleModeChange(nextMode: RouteMode) {
@@ -280,7 +289,7 @@ export default function HomePage() {
           </Card>
         </section>
 
-        <IncidentPanel currentLocation={currentLocation} />
+        <IncidentPanel currentLocation={currentLocation} onReportSubmitted={refreshAfterReport} />
 
         {routeResponse && (
           <Card>

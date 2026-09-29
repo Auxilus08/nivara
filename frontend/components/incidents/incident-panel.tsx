@@ -22,6 +22,7 @@ import type { Coordinate } from "@/lib/navigation";
 
 type IncidentPanelProps = {
   currentLocation: Coordinate | null;
+  onReportSubmitted?: () => Promise<boolean>;
 };
 
 const categoryLabels: Record<IncidentCategory, string> = {
@@ -48,7 +49,7 @@ function toIso(value: string) {
   return value ? new Date(value).toISOString() : undefined;
 }
 
-export function IncidentPanel({ currentLocation }: IncidentPanelProps) {
+export function IncidentPanel({ currentLocation, onReportSubmitted }: IncidentPanelProps) {
   const [incidents, setIncidents] = useState<Incident[]>([]);
   const [selectedIncident, setSelectedIncident] = useState<Incident | null>(null);
   const [isLoading, setIsLoading] = useState(true);
@@ -137,8 +138,13 @@ export function IncidentPanel({ currentLocation }: IncidentPanelProps) {
         severity: report.severity,
         ...(occurredAt ? { occurred_at: occurredAt } : {}),
       });
+      const routeRefreshed = onReportSubmitted ? await onReportSubmitted() : false;
       setReport((current) => ({ ...current, description: "", occurredAt: "" }));
-      setReportSuccess("Your community report was submitted for review and is currently unverified.");
+      setReportSuccess(
+        routeRefreshed
+          ? "Your community report was submitted for review and the current route comparison was refreshed with available incident indicators."
+          : "Your community report was submitted for review and is currently unverified.",
+      );
       await loadIncidents(filters);
     } catch (requestError) {
       setError(requestError instanceof Error ? requestError.message : "The incident report could not be submitted.");
