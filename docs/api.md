@@ -286,11 +286,19 @@ return `404`.
 
 ## Trips
 
-POST /trips
+### POST /trips
 
 Purpose:
 
 Create a Safe Trip.
+
+Implemented contract: `POST /api/v1/trips`. The request captures the selected
+route snapshot and a future, timezone-aware expected arrival time. The created
+trip is persisted with `status: "planned"`. This endpoint does not start
+monitoring or implement tracking, deviation detection, check-ins, completion,
+history, contacts, notifications, or emergency workflows; those remain later
+tasks. Route geometry endpoints must match the submitted origin and destination.
+Invalid or non-future arrival times return `422`.
 
 ---
 

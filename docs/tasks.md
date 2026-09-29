@@ -61,8 +61,8 @@ Status values:
 
 # Safe Trip
 
-- [ ] T050 Safe Trip model
-- [ ] T051 Safe Trip creation
+- [x] T050 Safe Trip model
+- [x] T051 Safe Trip creation
 - [ ] T052 Safe Trip start
 - [ ] T053 Location tracking
 - [ ] T054 Route deviation detection
@@ -122,7 +122,7 @@ Status values:
 - [x] T100 Navigation integration
 - [x] T101 Safety engine integration
 - [x] T102 Community reports integration
-- [ ] T103 Safe Trip integration
+- [x] T103 Safe Trip integration
 - [ ] T104 Emergency integration
 - [ ] T105 Privacy integration
 - [ ] T106 Demo data

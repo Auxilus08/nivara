@@ -6,6 +6,7 @@ from app.api.routes.geocoding import router as geocoding_router
 from app.api.routes.incidents import router as incidents_router
 from app.api.routes.routes import router as routes_router
 from app.api.routes.safety import router as safety_router
+from app.api.routes.trips import router as trips_router
 from app.core.config import get_settings
 from app.core.errors import register_exception_handlers
 
@@ -36,6 +37,7 @@ def create_app() -> FastAPI:
     app.include_router(incidents_router)
     app.include_router(routes_router)
     app.include_router(safety_router)
+    app.include_router(trips_router)
     return app
 
 

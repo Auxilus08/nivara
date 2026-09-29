@@ -361,6 +361,11 @@ Check-in / assistance
     ->
 Trip completion
 
+T103 currently implements only the persisted plan boundary: the selected route
+is stored as a provider-neutral snapshot with a future expected arrival and
+`planned` status. Monitoring and subsequent lifecycle transitions are not part
+of this slice.
+
 ---
 
 ## 13. Emergency Data Flow

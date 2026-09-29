@@ -367,3 +367,19 @@ This connects the completed vertical slices for demonstration without creating
 a second safety model or coupling the browser to providers. Independent
 heatmap and incident-panel failures remain visible without preventing route
 requests.
+
+---
+
+## ADR-023: Safe Trip creation stores a route snapshot
+
+Decision:
+
+Create Safe Trips from the selected route using a provider-neutral snapshot of
+its endpoints, geometry, distance, duration, and expected arrival. Persist the
+initial status as `planned`; later monitoring and lifecycle operations remain
+separate tasks.
+
+Reason:
+
+The creation flow preserves what the user selected while avoiding premature
+implementation of tracking, deviation, check-in, or emergency behavior.

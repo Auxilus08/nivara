@@ -299,5 +299,47 @@ integration was run or claimed because no credential was configured.
 
 ## Exact Next Task
 
-T103 — Implement the Safe Trip model and creation flow while preserving the
-existing route, incident, and contextual safety contracts.
+T104 — Emergency integration, or complete T052 Safe Trip start if the Safe
+Trip feature is continued before emergency work.
+
+## T103 Handoff
+
+T103 is complete for its documented scope. The backend now persists Safe Trip
+plans as provider-neutral selected-route snapshots with a future expected
+arrival and `planned` status. `POST /api/v1/trips` validates route geometry
+endpoints and commits the plan through the repository boundary. The frontend
+adds expected-arrival input and creation feedback to the selected-route panel.
+
+Files added:
+
+- `backend/app/models/trip.py`
+- `backend/app/schemas/trip.py`
+- `backend/app/repositories/trip.py`
+- `backend/app/services/trips.py`
+- `backend/app/api/routes/trips.py`
+- `backend/alembic/versions/0002_create_safe_trips.py`
+- `backend/tests/test_trips.py`
+- `frontend/lib/trips.ts`
+
+Files modified:
+
+- backend model registration, dependencies, application router, and Alembic model imports
+- `frontend/app/page.tsx`
+- `docs/tasks.md`, `docs/api.md`, `docs/architecture.md`, and `docs/decisions.md`
+
+The implementation deliberately does not start monitoring and does not add
+location tracking, deviation detection, check-ins, completion, history,
+trusted contacts, notifications, privacy controls, or SOS behavior.
+
+Verification commands:
+
+- `python3 -m pytest -q tests/test_trips.py` — passed, 4 tests
+- `python3 -m pytest -q` — passed, 100 tests
+- `pnpm typecheck` from `frontend/` — passed
+- `pnpm build` from `frontend/` — passed
+- `git diff --check` — passed
+- `python3 -m compileall backend` — passed
+
+Live PostgreSQL/PostGIS and OpenRouteService remain unavailable in this
+environment; tests use in-process repositories and do not claim live
+database/provider validation.

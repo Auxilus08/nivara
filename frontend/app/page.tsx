@@ -5,6 +5,7 @@ import { LocateFixed, Map, ShieldCheck } from "lucide-react";
 
 import { Card, CardContent } from "@/components/ui/card";
 import { IncidentPanel } from "@/components/incidents/incident-panel";
+import { createSafeTrip, type SafeTrip } from "@/lib/trips";
 import { searchDestinations, type DestinationSuggestion } from "@/lib/geocoding";
 import {
   calculateRoutes,
@@ -63,6 +64,15 @@ export default function HomePage() {
   const [heatmap, setHeatmap] = useState<HeatmapResponse | null>(null);
   const [isLoadingHeatmap, setIsLoadingHeatmap] = useState(false);
   const [heatmapError, setHeatmapError] = useState<string | null>(null);
+  const [expectedArrival, setExpectedArrival] = useState(() => {
+    const value = new Date(Date.now() + 60 * 60 * 1000);
+    value.setSeconds(0, 0);
+    const offset = value.getTimezoneOffset();
+    return new Date(value.getTime() - offset * 60 * 1000).toISOString().slice(0, 16);
+  });
+  const [createdTrip, setCreatedTrip] = useState<SafeTrip | null>(null);
+  const [isCreatingTrip, setIsCreatingTrip] = useState(false);
+  const [tripError, setTripError] = useState<string | null>(null);
 
   function requestLocation() {
     if (!navigator.geolocation) {
@@ -157,6 +167,8 @@ export default function HomePage() {
   async function requestRoute(routeMode: RouteMode): Promise<boolean> {
     setError(null);
     setRouteResponse(null);
+    setCreatedTrip(null);
+    setTripError(null);
     if (!currentLocation) {
       setError("Select your current location before requesting a route.");
       return false;
@@ -194,6 +206,19 @@ export default function HomePage() {
   const selectedRoute = routeResponse?.routes.find(
     (route) => route.route_id === routeResponse.selected_route_id,
   ) ?? null;
+
+  async function handleCreateSafeTrip() {
+    if (!selectedRoute) return;
+    setIsCreatingTrip(true);
+    setTripError(null);
+    try {
+      setCreatedTrip(await createSafeTrip(selectedRoute, expectedArrival));
+    } catch (createError) {
+      setTripError(createError instanceof Error ? createError.message : "The Safe Trip could not be created.");
+    } finally {
+      setIsCreatingTrip(false);
+    }
+  }
 
   return (
     <main className="min-h-screen px-6 py-8 sm:px-10">
@@ -311,6 +336,21 @@ export default function HomePage() {
                   </div>
                   {selectedRoute.safety_assessment && <p className="mt-2 text-xs text-slate-600">Assessment confidence: {selectedRoute.safety_assessment.confidence}. Selected based on the current mode weighting and available incident indicators.</p>}
                   {!selectedRoute.safety_assessment && <p className="mt-2 text-xs text-slate-600">Incident-derived safety indicators were unavailable for this route comparison.</p>}
+                  <div className="mt-4 border-t border-indigo-200 pt-4">
+                    <p className="text-sm font-semibold text-slate-800">Protect this journey</p>
+                    <p className="mt-1 text-xs text-slate-600">Create a Safe Trip plan with this selected route and an expected arrival time.</p>
+                    <div className="mt-3 flex flex-col gap-2 sm:flex-row sm:items-end">
+                      <label className="flex-1 text-xs font-medium text-slate-700" htmlFor="expected-arrival">
+                        Expected arrival
+                        <input id="expected-arrival" type="datetime-local" value={expectedArrival} onChange={(event) => { setExpectedArrival(event.target.value); setTripError(null); }} disabled={isCreatingTrip} className="mt-1 block w-full rounded-lg border border-slate-200 bg-white px-2.5 py-2 text-sm font-normal text-slate-700" />
+                      </label>
+                      <button type="button" onClick={() => void handleCreateSafeTrip()} disabled={isCreatingTrip || !selectedRoute.geometry} className="rounded-lg bg-indigo-600 px-3 py-2 text-sm font-semibold text-white disabled:cursor-not-allowed disabled:opacity-50">
+                        {isCreatingTrip ? "Creating…" : "Create Safe Trip"}
+                      </button>
+                    </div>
+                    {tripError && <p role="alert" className="mt-2 text-xs text-rose-700">{tripError}</p>}
+                    {createdTrip && <p role="status" className="mt-2 text-xs text-emerald-700">Safe Trip plan created for {new Date(createdTrip.expected_arrival_at).toLocaleString()}. Monitoring has not started.</p>}
+                  </div>
                 </div>
               )}
               <div className="mt-4 grid gap-3 sm:grid-cols-2">
