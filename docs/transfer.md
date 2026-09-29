@@ -72,8 +72,8 @@ Frontend:
   client without exposing routing credentials.
 - `frontend/lib/geocoding.ts` defines the typed destination search client and
   validates provider-neutral response shapes.
-- `frontend/app/page.tsx` provides the minimum navigation shell: map surface
-  placeholder, browser geolocation, destination search/selection, route
+- `frontend/app/page.tsx` provides the navigation shell: a client-only
+  interactive map, browser geolocation, destination search/selection, route
   mode selection, loading/error states, and normalized route result rendering.
 - Destination search is implemented through the provider-neutral geocoding
   client and selected coordinates are passed to the existing route client.
@@ -85,10 +85,10 @@ Frontend:
   occupied cells and sends each cell's `IncidentSignalContext` through the
   existing SafetyEngine.
 - `frontend/lib/navigation.ts` contains typed heatmap contracts and the API
-  client. `frontend/app/page.tsx` renders a lightweight CSS indicator overlay,
-  contextual legend, loading/error/no-data states, and the canonical
-  disclaimer. No map-rendering dependency was added because the repository has
-  no existing map library and T020 does not require selecting one.
+  client. `frontend/components/map/nivara-map.tsx` renders the returned cells
+  on a client-only Leaflet map with contextual legend, loading/error/no-data
+  states, and the canonical disclaimer. Leaflet uses OpenStreetMap-compatible
+  development tiles; it does not call the routing provider.
 
 ## Incident UI
 
@@ -185,6 +185,48 @@ visibility, and the API contract.
 
 ## API
 
+## Safe Places and Privacy MVP (current agent)
+
+Implemented backend files:
+
+- `backend/app/api/routes/safe_places.py`
+- `backend/app/services/safe_places.py`
+- `backend/app/schemas/safe_places.py`
+- `backend/app/api/routes/privacy.py`
+- `backend/app/services/privacy.py`
+- `backend/app/schemas/privacy.py`
+- `backend/tests/test_safe_places_privacy.py`
+
+`GET /api/v1/safe-places/nearby` validates latitude/longitude and a bounded
+radius (maximum 50 km), filters supported categories, and sorts the deterministic
+synthetic catalog by distance. `GET/PATCH /api/v1/privacy/settings` exposes
+privacy-preserving false defaults and three sharing controls. There is no auth,
+user model, persistence, automatic retention/deletion, or live places provider;
+these limitations are explicit in API/architecture docs.
+
+Frontend files:
+
+- `frontend/lib/safe-places.ts`
+- `frontend/components/safety/safety-controls.tsx`
+- `frontend/app/page.tsx`
+
+The compact panel loads nearby resources and passes selected coordinates through
+the existing destination state/route flow. It also shows explicit loading and
+unavailable states for resources and privacy settings.
+
+## Emergency integration (current agent)
+
+The verified emergency implementation requires an active Safe Trip, captures
+the latest recorded location when one exists, prevents duplicate active
+emergencies, and enforces `ACTIVE -> ACKNOWLEDGED -> RESOLVED` plus direct
+active resolution. The mock provider never sends real messages or dispatches
+emergency services. Privacy settings control response sharing status; there is
+no authenticated user isolation or real contact delivery.
+
+`backend/tests/test_emergency_end_to_end.py` deterministically exercises Safe
+Trip creation/start, location, deviation, check-in, trusted-contact association,
+privacy settings, SOS, acknowledgement, and resolution.
+
 Implemented:
 
 - `POST /api/v1/routes`
@@ -277,6 +319,35 @@ are unavailable; it does not claim live database or provider validation.
 Provider tests use mocked HTTP clients. No live map/routing provider
 integration was run or claimed because no credential was configured.
 
+## T061 Interactive Map Implementation
+
+The navigation shell now uses Leaflet and React Leaflet in
+`frontend/components/map/nivara-map.tsx`. It renders OpenStreetMap-compatible
+development tiles, the backend-selected route geometry, alternative route
+geometries when returned, the explicit browser location, the selected
+destination, and backend heatmap cells. The page dynamically loads the map with
+SSR disabled so Leaflet browser APIs are not evaluated during server rendering.
+
+Files changed for this implementation:
+
+- `frontend/components/map/nivara-map.tsx`
+- `frontend/app/page.tsx`
+- `frontend/app/globals.css`
+- `frontend/package.json`
+- `frontend/pnpm-lock.yaml`
+- `docs/tasks.md`
+- `docs/api.md`
+- `docs/architecture.md`
+- `docs/transfer.md`
+
+Verification completed: `pnpm typecheck`, `pnpm build`, and `git diff --check`.
+Backend route and heatmap behavior was not changed. No browser interaction or
+live tile/provider verification was performed in this handoff.
+
+The routing API key remains server-side in `ROUTING_API_KEY`; no public map or
+routing credential was added. The map does not start continuous location
+collection and does not calculate route, duration, or safety values.
+
 ## Known Limitations
 
 - No live routing credential is configured in this environment.
@@ -288,10 +359,10 @@ integration was run or claimed because no credential was configured.
 - Corridor context is a simple LineString proximity aggregate and does not yet
   account for route segment length, isolation, lighting, activity, or other
   future signals.
-- The map surface is a frontend shell, not a custom map engine.
+- The map is a frontend visualization layer, not a custom map or routing engine.
 - Heatmap points are occupied coarse cells centered on aggregated incident
-  locations; the frontend overlay is illustrative and does not provide map
-  tiles or route selection.
+  locations; the frontend renders them as contextual cells and does not select
+  routes or calculate risk.
 - The incident UI has no frontend test framework in the current repository;
   type checking and the production build are the frontend verification.
 - No live OpenRouteService/HeiGIT geocoding request was performed because no
@@ -448,5 +519,358 @@ Files modified:
 - `backend/tests/test_trips.py`
 - `docs/tasks.md`, `docs/api.md`, `docs/architecture.md`, and `docs/transfer.md`
 
-T055 remains responsible for presenting this assessment to users. The next
-recommended task is T055 — Safe Trip deviation UI/alerts.
+T055 was responsible for presenting this assessment to users. The next
+recommended task at that handoff was T055 — Safe Trip deviation UI/alerts.
+
+## T055 Handoff
+
+T055 is complete. The existing Safe Trip UI now presents the T054 deviation
+assessment for active trips. It shows whether the latest recorded location is
+within the planned route corridor, the returned distance and threshold, the
+backend explanation, and the evaluation time. Missing or unavailable status is
+kept distinct from being within the corridor and includes a retry action when
+appropriate.
+
+The explicit “Record current location” action remains the only location
+capture flow. After the T053 update is persisted, the frontend requests the
+T054 assessment and refreshes the route-status section. There is no polling,
+continuous GPS tracking, frontend deviation calculation, alerting, or
+emergency interpretation.
+
+Files modified for T055:
+
+- `frontend/lib/trips.ts`
+- `frontend/app/page.tsx`
+- `docs/tasks.md`
+- `docs/api.md`
+- `docs/transfer.md`
+
+Verification performed:
+
+- backend test suite, compileall, frontend typecheck, and production build
+- `git diff --check`
+- no live browser GPS or live PostgreSQL/PostGIS validation
+
+The next recommended task is T056 — Safe Trip Check-in.
+
+## T056 Handoff
+
+T056 is complete. Active Safe Trips now support explicit journey check-ins via
+`POST /api/v1/trips/{trip_id}/check-ins`. Each request creates a separate
+minimal record containing the check-in ID, trip ID, and server-generated
+timezone-aware UTC `checked_in_at` timestamp. Planned and completed trips are
+rejected with `409`; unknown trips return `404`.
+
+The frontend shows a `Check in` button only for active trips, prevents
+duplicate submissions while the request is in flight, and displays the latest
+recorded check-in or a contextual error. Check-ins are not inferred from
+location updates, route adherence, page activity, or missing status. No
+notifications, trusted contacts, SOS, emergency escalation, background
+tracking, completion, or history were added.
+
+Files created for T056:
+
+- `backend/app/repositories/trip_check_in.py`
+- `backend/alembic/versions/0005_create_safe_trip_check_ins.py`
+
+Files modified for T056:
+
+- `backend/app/models/trip.py`
+- `backend/app/models/__init__.py`
+- `backend/app/schemas/trip.py`
+- `backend/app/api/dependencies.py`
+- `backend/app/services/trips.py`
+- `backend/app/api/routes/trips.py`
+- `backend/tests/test_trips.py`
+- `frontend/lib/trips.ts`
+- `frontend/app/page.tsx`
+- `docs/tasks.md`, `docs/api.md`, `docs/architecture.md`, and `docs/transfer.md`
+
+The next recommended task is T057 — Safe Trip completion.
+
+## T057 Handoff
+
+T057 is complete. Active Safe Trips can now be explicitly completed through
+`POST /api/v1/trips/{trip_id}/complete`. The service transitions only
+`active` trips to `completed` and assigns a server-generated timezone-aware UTC
+`completed_at`. Planned trips, completed trips, and unknown trips are rejected
+with `409`, `409`, and `404` respectively. A repeated completion cannot replace
+the original timestamp.
+
+The frontend exposes `Complete Safe Trip` only while the trip is active,
+prevents duplicate requests, displays the completion timestamp, and removes
+active-only actions after success. Existing check-in and route-status details
+remain displayed where already available. Completion is not inferred from
+location, deviation, expected arrival, check-ins, or page activity.
+
+Files created for T057:
+
+- `backend/alembic/versions/0006_add_safe_trip_completion.py`
+
+Files modified for T057:
+
+- `backend/app/models/trip.py`
+- `backend/app/schemas/trip.py`
+- `backend/app/services/trips.py`
+- `backend/app/api/routes/trips.py`
+- `backend/tests/test_trips.py`
+- `frontend/lib/trips.ts`
+- `frontend/app/page.tsx`
+- `docs/tasks.md`, `docs/api.md`, `docs/architecture.md`, and `docs/transfer.md`
+
+The next recommended task is T058 — Safe Trip history.
+
+## T058 Handoff
+
+T058 is complete. Safe Trip lifecycle history is available through
+`GET /api/v1/trips/history`. It derives records from the existing Safe Trip
+rows, orders them newest-first by `created_at` with trip ID as a deterministic
+tie-breaker, and returns only lifecycle fields: trip ID, status, created,
+started, completed, expected-arrival, origin, and destination timestamps/data.
+
+Empty history is a successful `200` response with an empty list and count.
+The endpoint does not return route geometry, raw locations, check-ins,
+deviation assessments, or private database fields. Authentication is not yet
+implemented, so the current prototype cannot enforce real user-specific
+history isolation; this limitation is documented.
+
+The frontend loads history explicitly, supports loading/error/empty/retry
+states, and avoids duplicating the currently active trip in the history cards.
+It displays recorded lifecycle events without implying safe arrival or
+reconstructing route activity.
+
+Files modified for T058:
+
+- `backend/app/repositories/trip.py`
+- `backend/app/schemas/trip.py`
+- `backend/app/services/trips.py`
+- `backend/app/api/routes/trips.py`
+- `backend/tests/test_trips.py`
+- `frontend/lib/trips.ts`
+- `frontend/app/page.tsx`
+- `docs/tasks.md`, `docs/api.md`, `docs/architecture.md`, and `docs/transfer.md`
+
+No migration was required because the existing lifecycle fields were sufficient.
+
+The next recommended task is T060 — Trusted contact model. Authentication and
+privacy isolation remain important prototype limitations for future work.
+
+## T060 Handoff
+
+T060 is complete. Trusted Contacts now have a dedicated provider-neutral model
+and migration `0007_create_trusted_contacts.py`. Supported methods are `email`
+and `phone`, with bounded name/value validation. Contacts store only name,
+method, value, active state, and lifecycle timestamps; there are no provider
+IDs or delivery fields.
+
+Implemented endpoints:
+
+- `POST /api/v1/trusted-contacts`
+- `GET /api/v1/trusted-contacts`
+- `GET /api/v1/trusted-contacts/{contact_id}`
+- `DELETE /api/v1/trusted-contacts/{contact_id}`
+
+DELETE uses soft deactivation. Inactive contacts are hidden from list/get, and
+repeated deletion returns `404`. The frontend provides explicit load, add,
+list, remove, loading, empty, validation, and network-error states. It does
+not imply that contacts currently receive alerts.
+
+No SMS, email, push, WhatsApp, calls, SOS, escalation, OTP verification,
+authentication, or Safe Trip association was implemented. Because the
+prototype has no authentication, contact ownership is not yet isolated per
+real user; this limitation is documented.
+
+Files created for T060:
+
+- `backend/app/models/trusted_contact.py`
+- `backend/app/schemas/trusted_contact.py`
+- `backend/app/repositories/trusted_contact.py`
+- `backend/app/services/trusted_contacts.py`
+- `backend/app/api/routes/trusted_contacts.py`
+- `backend/alembic/versions/0007_create_trusted_contacts.py`
+- `backend/tests/test_trusted_contacts.py`
+
+Files modified for T060:
+
+- `backend/app/models/__init__.py`
+- `backend/app/api/dependencies.py`
+- `backend/app/main.py`
+- `docs/tasks.md`, `docs/api.md`, `docs/architecture.md`, and `docs/transfer.md`
+- `frontend/lib/trips.ts`
+- `frontend/app/page.tsx`
+
+The next recommended task from T060 was T061 — Create contact; that work is
+recorded below.
+
+## T061 Handoff
+
+T061 is complete as the Safe Trip trusted-contact selection capability. Safe
+Trips can now associate multiple active Trusted Contacts through the dedicated
+`safe_trip_trusted_contacts` table. Planned and active trips can be modified;
+completed trips reject attachment/removal with `409`. Duplicate associations
+are rejected, unknown or inactive contacts return `404`, and removing an
+association does not delete the underlying contact.
+
+Endpoints:
+
+- `POST /api/v1/trips/{trip_id}/trusted-contacts`
+- `GET /api/v1/trips/{trip_id}/trusted-contacts`
+- `DELETE /api/v1/trips/{trip_id}/trusted-contacts/{contact_id}`
+
+No notification delivery, emergency behavior, authentication, or user-level
+ownership isolation was added. Contact values are returned only through the
+explicit contact-management and trip-selection responses; they are not copied
+into Safe Trip rows or history and no location data is returned.
+
+Files created for T061:
+
+- `backend/app/models/trip_trusted_contact.py`
+- `backend/app/repositories/trip_trusted_contact.py`
+- `backend/alembic/versions/0008_create_safe_trip_trusted_contacts.py`
+- `backend/tests/test_trip_trusted_contacts.py`
+
+Files modified for T061:
+
+- `backend/app/models/__init__.py`
+- `backend/app/api/dependencies.py`
+- `backend/app/schemas/trusted_contact.py`
+- `backend/app/services/trips.py`
+- `backend/app/api/routes/trips.py`
+- `frontend/lib/trips.ts`
+- `frontend/app/page.tsx`
+- `docs/tasks.md`, `docs/api.md`, `docs/architecture.md`, and `docs/transfer.md`
+
+The next recommended task is T062 — List contacts.
+
+## T062 Handoff
+
+T062 is complete. `GET /api/v1/trusted-contacts` now has an explicit bounded
+list contract: it returns only active contacts, orders them newest-first by
+`created_at` with contact ID as a deterministic tie-breaker, and returns at
+most 100 items. Empty results remain a successful response with
+`{"contacts": [], "count": 0}`. The response exposes only the intended
+contact-management fields.
+
+The existing Safe Trip selection flow uses the same active-contact semantics;
+deactivated contacts remain unavailable for new associations. No pagination,
+filtering, authentication, user ownership, notifications, or unrelated UI
+behavior was added. Because authentication is not implemented, real user-level
+isolation cannot yet be enforced.
+
+Files modified for T062:
+
+- `backend/app/repositories/trusted_contact.py`
+- `backend/tests/test_trusted_contacts.py`
+- `docs/tasks.md`, `docs/api.md`, `docs/architecture.md`, and `docs/transfer.md`
+
+The next recommended task is T063 — Update contact.
+
+## T063–T065 Handoff
+
+T063, T064, and T065 are complete.
+
+T063 adds `PATCH /api/v1/trusted-contacts/{contact_id}` for partial updates of
+name, contact method, and contact value. Resulting email/phone combinations
+reuse the creation validators. IDs and creation timestamps remain stable,
+updated timestamps change, and Safe Trip associations/preferences remain
+attached to the same contact.
+
+T064 formalizes soft deactivation through the existing DELETE endpoint. Active
+contacts return `204`; inactive or unknown contacts return `404`. Rows are not
+physically deleted, so historical associations and preferences remain intact.
+Deactivated contacts disappear from active listings and cannot be newly
+selected for Safe Trips.
+
+T065 adds migration `0009_create_trusted_contact_sharing_preferences.py` and
+the following configuration endpoints:
+
+- `GET /api/v1/trusted-contacts/{contact_id}/sharing-preferences`
+- `PATCH /api/v1/trusted-contacts/{contact_id}/sharing-preferences`
+
+The one-to-one preference record contains restrictive-false defaults for
+`allow_trip_status`, `allow_location`, and `allow_emergency`. GET lazily
+initializes defaults for an active contact; PATCH supports non-empty partial
+updates. Preferences only configure future supported workflows; no data is
+sent and no notification/emergency behavior exists.
+
+Files created for T063–T065:
+
+- `backend/app/models/trusted_contact_sharing_preference.py`
+- `backend/alembic/versions/0009_create_trusted_contact_sharing_preferences.py`
+- `backend/tests/test_trusted_contact_preferences.py`
+
+Files modified for T063–T065:
+
+- `backend/app/models/__init__.py`
+- `backend/app/schemas/trusted_contact.py`
+- `backend/app/repositories/trusted_contact.py`
+- `backend/app/services/trusted_contacts.py`
+- `backend/app/api/dependencies.py`
+- `backend/app/api/routes/trusted_contacts.py`
+- `frontend/lib/trips.ts`
+- `frontend/app/page.tsx`
+- `docs/tasks.md`, `docs/api.md`, `docs/architecture.md`, `docs/decisions.md`, and `docs/transfer.md`
+
+Authentication and user ownership are still unavailable in this prototype.
+The next recommended task is T070 — Emergency model.
+
+## T106 Handoff — Deterministic synthetic demo data
+
+T106 adds an explicit, development-only seed utility for a deterministic set
+of synthetic incident indicators around a clearly approximate Priyadarshini
+College of Engineering, Nagpur demo center. The records use the existing
+incident model, enums, PostGIS point geometry, and safety/heatmap paths. No
+incident or route algorithm was changed, and the seed is never run during app
+startup.
+
+Files created:
+
+- `backend/scripts/__init__.py`
+- `backend/scripts/seed_demo_data.py`
+- `backend/tests/test_demo_seed.py`
+- `docs/demo-data.md`
+
+The seed creates 36 records with stable UUIDs, a `[DEMO]` description marker,
+multiple existing categories, severities, confidence levels, fixed past
+timestamps, and spatial clusters/sparse areas. It upserts only its own stable
+IDs, so rerunning it is idempotent and does not delete or alter unrelated
+incident rows.
+
+Run it explicitly from `backend` with:
+
+```bash
+python scripts/seed_demo_data.py
+```
+
+The seed requires the existing PostgreSQL/PostGIS database and migration chain.
+No live database or OpenRouteService validation was performed in the handoff
+environment. The next recommended task remains T070 — Emergency model.
+
+## T070–T077 Handoff — Minimal emergency vertical slice
+
+T070–T077 are implemented as a hackathon demo workflow. The new Emergency
+model and migration `0010_create_emergencies.py` support optional Safe Trip
+linkage, server timestamps, optional latest recorded coordinates, and the
+states `active`, `acknowledged`, and `resolved`.
+
+Endpoints:
+
+- `POST /api/v1/emergencies`
+- `POST /api/v1/emergencies/{emergency_id}/acknowledge`
+- `POST /api/v1/emergencies/{emergency_id}/resolve`
+- `GET /api/v1/emergencies/resources`
+
+Trip-linked SOS requires an active Safe Trip and rejects duplicate active or
+acknowledged emergencies. The service captures the latest T053 location when
+available without starting tracking. Invalid transitions cannot reopen or
+re-resolve an emergency.
+
+`MockEmergencyNotificationProvider` is demo-only: it records a minimal
+in-memory action and sends no SMS, email, push, or other notification.
+Resources are generic deterministic placeholders and contain no fabricated
+phone numbers. The frontend adds a confirmation-gated SOS panel with
+acknowledge and resolve controls and clearly labels the mock behavior.
+
+Known limitations: no authentication, real notification provider, emergency
+dispatch, live resource discovery, or live PostgreSQL/PostGIS validation was
+performed. The next recommended task is T080 — Nearby resource search.

@@ -66,6 +66,7 @@ Services                       Integrations
     +-- Emergency
     +-- Trusted Contacts
     +-- Privacy
+    +-- Safe Places
     |
     v
 Repositories
@@ -185,6 +186,27 @@ PostGIS should support:
 
 Avoid unnecessary custom spatial algorithms when PostGIS can perform the operation.
 
+Safe Places currently uses a small deterministic, provider-neutral demo catalog
+and haversine distance ordering so the MVP works without fabricating live place
+data. Privacy settings are an in-process prototype boundary until authentication
+and durable user settings exist.
+
+Emergency orchestration reuses the active Safe Trip and latest-location
+repositories. Its notification boundary is a mock provider only. Privacy flags
+are consulted before reporting sharing status, but there is no authenticated
+user/contact delivery integration yet.
+
+## Data retention and sensitive logging
+
+The current system stores incident reports, Safe Trip lifecycle/location/check-in
+records, trusted contacts, sharing preferences, and emergency lifecycle records
+through the existing database models. It does not implement automatic expiry or
+user-requested deletion workflows. Production work must add authenticated
+ownership, explicit retention periods, deletion/expiry jobs, and audit-safe
+privacy handling. Backend code contains no intentional logging of coordinates,
+contact values, emergency payloads, credentials, tokens, or passwords; the demo
+seed script prints only an aggregate count.
+
 ---
 
 ## 8. Core Domains
@@ -209,6 +231,17 @@ User-submitted reports and confidence handling.
 
 Journey lifecycle and monitoring.
 
+Safe Trip check-ins are persisted separately from the trip row through the
+`SafeTripCheckInService` and `SafeTripCheckInRepository`. The service permits
+only explicit check-ins for active trips and assigns the timezone-aware server
+timestamp; it does not infer status, store location, or trigger escalation.
+Completion is a separate explicit service transition from `active` to
+`completed`; it assigns a server-generated timezone-aware timestamp and does
+not infer arrival from location, deviation, expected arrival, or check-ins.
+History is derived read-only from the existing Safe Trip lifecycle row through
+`SafeTripRepository.list_history` and a focused service/schema projection; it
+does not create redundant lifecycle events or return tracking/check-in data.
+
 ### Emergency
 
 SOS and emergency state management.
@@ -216,6 +249,34 @@ SOS and emergency state management.
 ### Trusted Contacts
 
 User-configured emergency contacts.
+
+The current foundation stores provider-neutral phone or email contacts through
+dedicated model, repository, service, and API layers. DELETE deactivates a
+contact without invoking notification delivery. No user ownership relation is
+currently enforceable because authentication is not implemented.
+
+The contact list repository returns active contacts only, ordered by creation
+time and ID for deterministic results, with a bounded 100-item prototype
+response. The list projection contains only contact-management fields and no
+Safe Trip, location, emergency, or provider metadata.
+
+Contact updates are partial service-layer transitions that validate the
+resulting contact method/value pair and preserve the contact ID. DELETE is
+soft deactivation, so existing Safe Trip associations and sharing preferences
+remain attached to the historical contact row.
+
+Sharing permissions use a separate one-to-one
+`trusted_contact_sharing_preferences` model. The three explicit permissions
+(`allow_trip_status`, `allow_location`, and `allow_emergency`) default to false.
+GET lazily initializes a restrictive row for active contacts; PATCH updates
+only supplied fields. Preferences configure future workflows and do not invoke
+delivery or emergency behavior.
+
+Safe Trip selections use a separate `safe_trip_trusted_contacts` association
+model and repository with a composite key over trip/contact IDs. Planned and
+active trips may select multiple active contacts; completed trips are read-only.
+The association stores no duplicated phone/email value and has no notification
+side effects. Removing an association leaves the Trusted Contact intact.
 
 ### Safe Places
 
@@ -338,10 +399,15 @@ passes each occupied cell's signals to the existing database-independent
 SafetyEngine. The API exposes cell centers, assessment values, and aggregate
 counts only. It omits raw incident identity and other unnecessary details.
 
-The frontend currently renders the returned points as a lightweight CSS
-contextual overlay on the existing map shell. This is a visualization layer,
-not a map engine or a route-selection algorithm. No-data cells are omitted and
-are not assigned a low-risk score.
+The frontend renders the returned points as contextual cells on the Leaflet map.
+This is a visualization layer, not a map engine or a route-selection algorithm.
+No-data cells are omitted and are not assigned a low-risk score.
+
+The navigation page uses a client-only `frontend/components/map/nivara-map.tsx`
+component. It renders OpenStreetMap-compatible development tiles, backend
+route geometries, current-location and destination markers, and heatmap cells.
+Leaflet is loaded only in the browser; route requests and provider credentials
+remain behind the Nivara API.
 
 ---
 
@@ -427,3 +493,25 @@ Incident record
 Safety engine
 
 This pipeline is independent from the core product.
+
+## 16. Synthetic demo data
+
+Development demonstrations may use the explicit
+`backend/scripts/seed_demo_data.py` utility. It writes only stable,
+`[DEMO]`-marked synthetic Incident records through the existing model and
+PostGIS geometry conventions. The seed is not run at application startup,
+does not alter the SafetyEngine or route comparison, and never deletes
+unrelated incident records.
+
+## 17. Emergency workflow
+
+Emergency records are independent lifecycle entities with optional Safe Trip
+association. The service owns the state machine `active -> acknowledged ->
+resolved`, with direct `active -> resolved` also allowed. Trip-linked SOS uses
+only the latest explicitly recorded location and does not start background
+GPS.
+
+Notification delivery is isolated behind `EmergencyNotificationProvider`. The
+current implementation is a mock/demo provider and records only minimal IDs in
+memory; it sends no real messages. Resource discovery returns deterministic
+placeholders. No emergency-service dispatch or response guarantee is implied.

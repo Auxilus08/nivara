@@ -47,6 +47,7 @@ class SafeTrip(Base):
         String(32), nullable=False, default=SafeTripStatus.PLANNED.value, index=True
     )
     started_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    completed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, server_default=func.now())
 
 
@@ -70,3 +71,17 @@ class SafeTripLocation(Base):
     )
     recorded_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, index=True)
     received_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, server_default=func.now())
+
+
+class SafeTripCheckIn(Base):
+    """An explicit user check-in recorded during an active Safe Trip."""
+
+    __tablename__ = "safe_trip_check_ins"
+
+    id: Mapped[UUID] = mapped_column(PGUUID(as_uuid=True), primary_key=True, default=uuid4)
+    trip_id: Mapped[UUID] = mapped_column(
+        PGUUID(as_uuid=True), ForeignKey("safe_trips.id", ondelete="CASCADE"), nullable=False, index=True
+    )
+    checked_in_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, server_default=func.now(), index=True
+    )

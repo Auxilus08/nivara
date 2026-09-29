@@ -163,6 +163,42 @@ provider. This is separate from the existing directions base URL.
 
 ## Safety
 
+## Safe Places
+
+`GET /api/v1/safe-places/nearby?latitude={lat}&longitude={lon}&radius={metres}&category={category}`
+
+Returns deterministically ranked, bounded synthetic demo assistance resources.
+Supported categories are `hospital`, `police_station`, `petrol_pump`, `hotel`,
+and `open_business`. Radius is greater than zero and at most 50,000 metres.
+Results include distance and coordinates; no emergency phone numbers or safety
+claims are returned. The response explicitly identifies the catalog as demo data.
+
+## Privacy
+
+`GET /api/v1/privacy/settings` and `PATCH /api/v1/privacy/settings`
+
+The patch accepts `location_sharing_enabled`,
+`trusted_contact_sharing_enabled`, and `emergency_sharing_enabled`. Defaults are
+false. Because authentication/user storage is not implemented, these are
+prototype-global in-process settings and are not user-isolated or durable.
+
+## Emergency
+
+`POST /api/v1/emergencies` creates an `active` emergency for an active Safe
+Trip, captures the latest recorded trip location when available, and rejects a
+second active/acknowledged emergency for the same trip with `409`.
+`POST /api/v1/emergencies/{id}/acknowledge` and
+`POST /api/v1/emergencies/{id}/resolve` implement the state machine
+`active -> acknowledged -> resolved`, with direct `active -> resolved` also
+allowed. Unknown IDs return `404`; invalid transitions return `409`.
+
+The notification provider is deterministic mock-only and never sends SMS,
+email, push, or emergency-service dispatch. Responses expose `notification_mode`
+and `sharing_status`; when privacy sharing is disabled, the API reports
+`sharing_disabled` and does not claim contact details were shared. Nearby
+resource discovery is provided by `/api/v1/safe-places/nearby`; the existing
+emergency resources endpoint remains limited to demo workflow placeholders.
+
 GET /safety/score
 
 Purpose:
@@ -191,6 +227,14 @@ treated as a low-risk assessment.
 Example:
 
 `GET /api/v1/safety/heatmap?min_latitude=12.90&min_longitude=77.55&max_latitude=12.95&max_longitude=77.60&rows=8&columns=8`
+
+## Synthetic demo data
+
+The development seed command creates explicitly marked synthetic incident
+records for the Nivara hackathon demonstration around an approximate
+Priyadarshini College of Engineering, Nagpur demo center. These records are
+not factual reports or real-world safety intelligence. See `docs/demo-data.md`
+for the seed command and idempotency behavior.
 
 ```json
 {
@@ -296,8 +340,9 @@ Implemented contract: `POST /api/v1/trips`. The request captures the selected
 route snapshot and a future, timezone-aware expected arrival time. The created
 trip is persisted with `status: "planned"`. This endpoint does not start
 monitoring or implement tracking, deviation detection, check-ins, completion,
-history, contacts, notifications, or emergency workflows; those remain later
-tasks. Route geometry endpoints must match the submitted origin and destination.
+history, contacts, notifications, or emergency workflows; those concerns use
+separate lifecycle or feature endpoints. Route geometry endpoints must match
+the submitted origin and destination.
 Invalid or non-future arrival times return `422`.
 
 ---
@@ -307,6 +352,26 @@ GET /trips/{trip_id}
 Purpose:
 
 Retrieve trip state.
+
+---
+
+GET /trips/history
+
+Purpose:
+
+Review Safe Trip lifecycle history.
+
+Implemented contract: `GET /api/v1/trips/history`. The response contains
+newest-first lifecycle records with deterministic `created_at` and trip ID
+ordering. Each item includes `id`, `status`, `created_at`, optional
+`started_at`, optional `completed_at`, `expected_arrival_at`, `origin`, and
+`destination`. It does not include route geometry, location updates,
+check-ins, deviation assessments, or other internal fields. An empty history
+returns `200` with `trips: []` and `count: 0`.
+
+Authentication is not implemented in the current prototype, so this endpoint
+returns all Safe Trip records accessible through the current backend session
+model; it does not claim real user-specific isolation.
 
 ---
 
@@ -325,11 +390,19 @@ return `404`. Starting an already active or otherwise non-planned trip returns
 
 ---
 
-POST /trips/{trip_id}/check-in
+POST /trips/{trip_id}/check-ins
 
 Purpose:
 
 Record a user check-in.
+
+Implemented contract: `POST /api/v1/trips/{trip_id}/check-ins`. The request
+has no client-supplied timestamp. Only `active` trips accept a check-in;
+planned and completed trips return `409`, and missing trips return `404`. The
+server records an authoritative timezone-aware UTC `checked_in_at` timestamp
+and returns only `id`, `trip_id`, and `checked_in_at`. Repeated explicit
+check-ins create separate records. A check-in is a user action and is not a
+safety or emergency determination.
 
 ---
 
@@ -365,6 +438,14 @@ Purpose:
 
 Complete a Safe Trip.
 
+Implemented contract: `POST /api/v1/trips/{trip_id}/complete`. Only an active
+trip can be completed; planned and already completed trips return `409`, and a
+missing trip returns `404`. The server changes the lifecycle from `active` to
+`completed`, assigns a timezone-aware UTC `completed_at`, and returns the
+updated Safe Trip representation. No client timestamp is accepted. Completion
+is an explicit user action and does not verify arrival or claim that the user
+is safe.
+
 ---
 
 GET /trips/{trip_id}/deviation
@@ -385,41 +466,114 @@ location only; it does not persist deviation state or apply hysteresis.
 Active trips with no recorded location return `409` because deviation status
 is unavailable. Missing trips return `404`, and planned or completed trips
 return `409`. Deviation is route-adherence information, not a safety score or
-an emergency determination.
+an emergency determination. The frontend presents this assessment and does
+not calculate deviation independently.
 
 ---
 
 ## Trusted Contacts
 
-GET /trusted-contacts
+GET /api/v1/trusted-contacts
 
 Purpose:
 
 List configured trusted contacts.
 
+Implemented contract: `GET /api/v1/trusted-contacts`. Returns only active
+contacts in deterministic newest-first order (`created_at DESC`, then ID
+descending) and returns `200` with an empty collection when none exist. The
+prototype returns at most 100 contacts; `count` is the number of returned
+items. No pagination parameter is currently exposed.
+
 ---
 
-POST /trusted-contacts
+POST /api/v1/trusted-contacts
 
 Purpose:
 
 Create a trusted contact.
 
----
-
-PATCH /trusted-contacts/{contact_id}
-
-Purpose:
-
-Update a trusted contact.
+Implemented contract: `POST /api/v1/trusted-contacts`. The request requires a
+bounded non-empty name, `contact_method` of `email` or `phone`, and a
+structurally valid contact value. It returns the created contact with `201`.
+This endpoint stores contact data only; it does not send notifications.
 
 ---
 
-DELETE /trusted-contacts/{contact_id}
+PATCH /api/v1/trusted-contacts/{contact_id}
 
 Purpose:
 
-Delete a trusted contact.
+Partially update an active trusted contact.
+
+The request may contain any non-empty subset of `name`, `contact_method`, and
+`contact_value`. The resulting method/value combination is validated using the
+same email and phone rules as creation. Empty patches, invalid combinations,
+unknown contacts, and inactive contacts are rejected with `422` or `404` as
+appropriate. The contact ID and `created_at` remain unchanged; `updated_at` is
+updated by the service. Existing Safe Trip associations and sharing
+preferences remain attached to the same contact ID.
+
+---
+
+GET /api/v1/trusted-contacts/{contact_id}
+
+Purpose:
+
+Retrieve one active trusted contact. Unknown or deactivated contacts return
+`404`.
+
+---
+
+DELETE /api/v1/trusted-contacts/{contact_id}
+
+Purpose:
+
+Deactivate a trusted contact. The endpoint returns `204`; repeated deletion or
+unknown contacts return `404`. Deactivated contacts are not returned by list or
+get endpoints. DELETE is soft deactivation: the database row, preferences, and
+historical Safe Trip associations remain intact.
+
+The response includes only the contact management fields: ID, name, method,
+value, active state, and timestamps. No provider identifiers, user foreign key,
+Safe Trip data, or delivery behavior is exposed. Authentication is not yet
+implemented, so prototype access is not user-isolated.
+
+### Safe Trip trusted-contact selections
+
+`POST /api/v1/trips/{trip_id}/trusted-contacts` associates an existing active
+trusted contact with a planned or active Safe Trip. The request body is
+`{"trusted_contact_id": "..."}` and the response includes the trip/contact
+IDs, association timestamp, and the intentionally selected contact fields.
+Unknown trips or contacts return `404`; inactive contacts cannot be selected;
+completed trips and duplicate selections return `409`.
+
+`GET /api/v1/trips/{trip_id}/trusted-contacts` returns the selected active
+contacts for a trip and returns an empty collection when none are selected.
+
+`DELETE /api/v1/trips/{trip_id}/trusted-contacts/{contact_id}` removes only the
+association and returns `204`. It never deletes the Trusted Contact itself.
+Completed trips cannot be modified. These endpoints persist only the
+association and do not send notifications or expose location data. Authentication
+is not implemented, so prototype user-level isolation cannot be enforced.
+
+### Sharing preferences
+
+`GET /api/v1/trusted-contacts/{contact_id}/sharing-preferences` returns the
+contact's explicit future-sharing permissions. If no preference row exists for
+an active contact, the service initializes a restrictive default with all
+permissions false.
+
+`PATCH /api/v1/trusted-contacts/{contact_id}/sharing-preferences` accepts a
+non-empty partial object containing `allow_trip_status`, `allow_location`,
+and/or `allow_emergency`. All values default to false and unknown or inactive
+contacts return `404`; empty patches return `422`.
+
+`allow_trip_status` controls whether future supported workflows may share Safe
+Trip lifecycle updates; `allow_location` controls future location sharing;
+and `allow_emergency` controls future emergency-related sharing. These flags
+do not send notifications or transmit data today. Preference responses expose
+the contact ID, three permission fields, and timestamps only.
 
 ---
 
@@ -494,6 +648,20 @@ Update privacy configuration.
 
 ---
 
+## Frontend Map Visualization
+
+The navigation page uses a client-only Leaflet map with OpenStreetMap-compatible
+development tiles. It visualizes the normalized latitude/longitude route
+geometry returned by `POST /api/v1/routes`, the selected destination, the
+explicitly captured browser location, and the backend heatmap response when the
+user requests contextual indicators.
+
+The frontend does not call OpenRouteService, calculate routes or durations,
+choose routes, or calculate safety values. `ROUTING_API_KEY` remains server-side;
+no `NEXT_PUBLIC_*` routing or map credential is required. Route and heatmap
+unavailability leaves the map usable without fabricating geometry or safety
+values.
+
 ## API Rules
 
 All endpoints should:
@@ -504,3 +672,21 @@ All endpoints should:
 - avoid leaking sensitive information
 - respect authorization
 - respect privacy settings
+
+## Emergency workflow
+
+`POST /api/v1/emergencies` creates an explicit emergency record. A trip-linked
+SOS requires an active Safe Trip, rejects duplicate active/acknowledged
+emergencies with `409`, and captures the latest stored trip location when one
+exists. `trip_id` is optional for a standalone demo SOS.
+
+`POST /api/v1/emergencies/{id}/acknowledge` permits `active -> acknowledged`.
+`POST /api/v1/emergencies/{id}/resolve` permits `active -> resolved` and
+`acknowledged -> resolved`. Invalid transitions return `409`; unknown records
+return `404`. Lifecycle timestamps are server-generated and timezone-aware.
+
+`GET /api/v1/emergencies/resources` returns deterministic demo placeholders.
+No real emergency number, dispatch integration, SMS/email delivery, or
+guaranteed response is provided. Emergency responses identify the notification
+mode as `mock_demo_only`; the mock provider records a minimal action without
+contacting trusted contacts.

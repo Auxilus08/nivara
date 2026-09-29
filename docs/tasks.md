@@ -23,7 +23,7 @@ Status values:
 
 # Navigation
 
-- [x] T010 Map integration
+- [x] T010 Map integration and route visualization
 - [x] T011 Current location
 - [x] T012 Destination search
 - [x] T013 Routing integration
@@ -66,54 +66,54 @@ Status values:
 - [x] T052 Safe Trip start
 - [x] T053 Location tracking
 - [x] T054 Route deviation detection
-- [ ] T055 Deviation UI
-- [ ] T056 Check-in
-- [ ] T057 Trip completion
-- [ ] T058 Trip history
+- [x] T055 Deviation UI
+- [x] T056 Check-in
+- [x] T057 Trip completion
+- [x] T058 Trip history
 
 ---
 
 # Trusted Contacts
 
-- [ ] T060 Trusted contact model
-- [ ] T061 Create contact
-- [ ] T062 List contacts
-- [ ] T063 Update contact
-- [ ] T064 Delete contact
-- [ ] T065 Sharing preferences
+- [x] T060 Trusted contact model
+- [x] T061 Create contact
+- [x] T062 List contacts
+- [x] T063 Update contact
+- [x] T064 Delete contact
+- [x] T065 Sharing preferences
 
 ---
 
 # Emergency
 
-- [ ] T070 Emergency model
-- [ ] T071 SOS activation
-- [ ] T072 Emergency state machine
-- [ ] T073 Contact notification abstraction
-- [ ] T074 Emergency resource discovery
-- [ ] T075 Emergency UI
-- [ ] T076 Emergency acknowledgement
-- [ ] T077 Emergency resolution
+- [x] T070 Emergency model
+- [x] T071 SOS activation
+- [x] T072 Emergency state machine
+- [x] T073 Contact notification abstraction
+- [x] T074 Emergency resource discovery
+- [x] T075 Emergency UI
+- [x] T076 Emergency acknowledgement
+- [x] T077 Emergency resolution
 
 ---
 
 # Safe Places
 
-- [ ] T080 Nearby resource search
-- [ ] T081 Resource filtering
-- [ ] T082 Resource ranking
-- [ ] T083 Navigation to resource
+- [x] T080 Nearby resource search
+- [x] T081 Resource filtering
+- [x] T082 Resource ranking
+- [x] T083 Navigation to resource
 
 ---
 
 # Privacy
 
-- [ ] T090 Privacy model
-- [ ] T091 Location sharing controls
-- [ ] T092 Trusted-contact sharing controls
-- [ ] T093 Emergency sharing controls
-- [ ] T094 Data retention policy
-- [ ] T095 Sensitive logging review
+- [x] T090 Privacy model
+- [x] T091 Location sharing controls
+- [x] T092 Trusted-contact sharing controls
+- [x] T093 Emergency sharing controls
+- [x] T094 Data retention policy
+- [x] T095 Sensitive logging review
 
 ---
 
@@ -123,12 +123,12 @@ Status values:
 - [x] T101 Safety engine integration
 - [x] T102 Community reports integration
 - [x] T103 Safe Trip integration
-- [ ] T104 Emergency integration
-- [ ] T105 Privacy integration
-- [ ] T106 Demo data
-- [ ] T107 End-to-end testing
-- [ ] T108 UI polish
-- [ ] T109 Hackathon demo preparation
+- [x] T104 Emergency integration
+- [x] T105 Privacy integration
+- [x] T106 Demo data
+- [x] T107 End-to-end testing
+- [x] T108 UI polish
+- [x] T109 Hackathon demo preparation
 
 ---
 

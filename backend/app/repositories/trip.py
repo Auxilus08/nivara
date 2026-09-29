@@ -1,5 +1,6 @@
 from uuid import UUID
 
+from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.trip import SafeTrip
@@ -18,6 +19,11 @@ class SafeTripRepository:
 
     async def get_by_id(self, trip_id: UUID) -> SafeTrip | None:
         return await self.session.get(SafeTrip, trip_id)
+
+    async def list_history(self) -> list[SafeTrip]:
+        statement = select(SafeTrip).order_by(SafeTrip.created_at.desc(), SafeTrip.id.desc())
+        result = await self.session.execute(statement)
+        return list(result.scalars().all())
 
     async def update(self, trip: SafeTrip) -> SafeTrip:
         await self.session.flush()

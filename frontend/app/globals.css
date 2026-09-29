@@ -1,6 +1,14 @@
+@import "leaflet/dist/leaflet.css";
+
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
+
+.leaflet-container { font-family: inherit; }
+.nivara-map-marker { background: transparent; border: 0; }
+.nivara-map-marker span { display: block; }
+.nivara-map-marker-current span { width: 16px; height: 16px; margin: 3px; border: 3px solid white; border-radius: 9999px; background: #4f46e5; box-shadow: 0 1px 5px rgb(15 23 42 / 0.45); }
+.nivara-map-marker-destination span { width: 18px; height: 18px; border: 3px solid white; border-radius: 9999px 9999px 9999px 0; background: #e11d48; box-shadow: 0 1px 5px rgb(15 23 42 / 0.45); transform: rotate(-45deg); }
 
 :root { color-scheme: light; }
 * { box-sizing: border-box; }

@@ -383,3 +383,39 @@ Reason:
 
 The creation flow preserves what the user selected while avoiding premature
 implementation of tracking, deviation, check-in, or emergency behavior.
+
+---
+
+## ADR-024: Safe Trip trusted-contact associations
+
+Decision:
+
+Represent Safe Trip contact selection with a dedicated
+`safe_trip_trusted_contacts` association table using a composite key over the
+trip and trusted-contact IDs. Allow multiple active contacts on planned and
+active trips, reject modifications after completion, and store only the IDs and
+association timestamp.
+
+Reason:
+
+Contact selection is a relationship between two existing domains, not a
+property of the route snapshot. A dedicated association avoids duplicating
+personal contact values in Safe Trip rows, supports multiple contacts, and
+leaves notification delivery and authentication for later tasks.
+
+---
+
+## ADR-025: Explicit restrictive trusted-contact sharing preferences
+
+Decision:
+
+Store trusted-contact sharing permissions in a separate one-to-one table with
+explicit `allow_trip_status`, `allow_location`, and `allow_emergency` fields.
+All permissions default to false. Contact deactivation does not delete the
+preference row, and preference APIs never trigger delivery.
+
+Reason:
+
+Future sharing workflows need independently checkable consent boundaries. A
+separate restrictive model avoids an unsafe catch-all permission and keeps
+contact management, Safe Trip selection, and notification delivery separate.

@@ -40,7 +40,24 @@ class SafeTripResponse(BaseModel):
     expected_arrival_at: datetime
     status: str
     started_at: datetime | None
+    completed_at: datetime | None
     created_at: datetime
+
+
+class SafeTripHistoryItem(BaseModel):
+    id: UUID
+    status: str
+    created_at: datetime
+    started_at: datetime | None
+    completed_at: datetime | None
+    expected_arrival_at: datetime
+    origin: Coordinate
+    destination: Coordinate
+
+
+class SafeTripHistoryResponse(BaseModel):
+    trips: list[SafeTripHistoryItem]
+    count: int
 
 
 class SafeTripLocationCreate(BaseModel):
@@ -63,6 +80,12 @@ class SafeTripLocationResponse(BaseModel):
     longitude: float
     recorded_at: datetime
     received_at: datetime
+
+
+class SafeTripCheckInResponse(BaseModel):
+    id: UUID
+    trip_id: UUID
+    checked_in_at: datetime
 
 
 class DeviationAssessment(BaseModel):

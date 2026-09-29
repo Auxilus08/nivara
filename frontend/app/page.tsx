@@ -1,22 +1,58 @@
 "use client";
 
+import dynamic from "next/dynamic";
 import { FormEvent, useState } from "react";
-import { LocateFixed, Map, ShieldCheck } from "lucide-react";
+import { ShieldCheck } from "lucide-react";
 
 import { Card, CardContent } from "@/components/ui/card";
+import { SafetyControls } from "@/components/safety/safety-controls";
 import { IncidentPanel } from "@/components/incidents/incident-panel";
-import { createSafeTrip, recordSafeTripLocation, startSafeTrip, type SafeTrip } from "@/lib/trips";
+import {
+  createSafeTrip,
+  attachSafeTripTrustedContact,
+  acknowledgeEmergency,
+  completeSafeTrip,
+  createEmergency,
+  createTrustedContact,
+  deleteTrustedContact,
+  getTrustedContactSharingPreferences,
+  getTrustedContacts,
+  getSafeTripTrustedContacts,
+  getSafeTripHistory,
+  getSafeTripDeviation,
+  getEmergencyResources,
+  recordSafeTripLocation,
+  recordSafeTripCheckIn,
+  resolveEmergency,
+  removeSafeTripTrustedContact,
+  startSafeTrip,
+  updateTrustedContact,
+  updateTrustedContactSharingPreferences,
+  type SafeTrip,
+  type SafeTripCheckIn,
+  type SafeTripDeviationAssessment,
+  type SafeTripHistoryItem,
+  type SafeTripTrustedContact,
+  type Emergency,
+  type EmergencyResource,
+  type TrustedContact,
+  type TrustedContactSharingPreferences,
+} from "@/lib/trips";
 import { searchDestinations, type DestinationSuggestion } from "@/lib/geocoding";
 import {
   calculateRoutes,
   calculateHeatmap,
   type Coordinate,
-  type HeatmapPoint,
   type HeatmapResponse,
   type HeatmapViewport,
   type RouteMode,
   type RouteResponse,
 } from "@/lib/navigation";
+
+const NivaraMap = dynamic(() => import("@/components/map/nivara-map"), {
+  ssr: false,
+  loading: () => <div className="flex h-full min-h-[320px] items-center justify-center rounded-xl bg-slate-200 text-sm text-slate-600">Loading interactive map…</div>,
+});
 
 function formatCoordinate(coordinate: Coordinate | null) {
   if (!coordinate) return "Location not selected";
@@ -33,6 +69,10 @@ function describeMode(mode: RouteMode) {
   return "Places greater weight on available safety indicators than travel time.";
 }
 
+function formatTripStatus(status: SafeTripHistoryItem["status"]) {
+  return status[0].toUpperCase() + status.slice(1);
+}
+
 function heatmapViewport(coordinate: Coordinate): HeatmapViewport {
   return {
     min_latitude: Math.max(-90, coordinate.latitude - 0.05),
@@ -40,13 +80,6 @@ function heatmapViewport(coordinate: Coordinate): HeatmapViewport {
     max_latitude: Math.min(90, coordinate.latitude + 0.05),
     max_longitude: Math.min(180, coordinate.longitude + 0.05),
   };
-}
-
-function heatmapColor(point: HeatmapPoint) {
-  if (point.risk_level === "high") return "#dc2626";
-  if (point.risk_level === "elevated") return "#f97316";
-  if (point.risk_level === "moderate") return "#eab308";
-  return "#22c55e";
 }
 
 export default function HomePage() {
@@ -76,6 +109,43 @@ export default function HomePage() {
   const [isStartingTrip, setIsStartingTrip] = useState(false);
   const [isRecordingLocation, setIsRecordingLocation] = useState(false);
   const [locationUpdateMessage, setLocationUpdateMessage] = useState<string | null>(null);
+  const [deviationAssessment, setDeviationAssessment] = useState<SafeTripDeviationAssessment | null>(null);
+  const [isCheckingDeviation, setIsCheckingDeviation] = useState(false);
+  const [deviationError, setDeviationError] = useState<string | null>(null);
+  const [lastCheckIn, setLastCheckIn] = useState<SafeTripCheckIn | null>(null);
+  const [isCheckingIn, setIsCheckingIn] = useState(false);
+  const [checkInError, setCheckInError] = useState<string | null>(null);
+  const [emergency, setEmergency] = useState<Emergency | null>(null);
+  const [emergencyResources, setEmergencyResources] = useState<EmergencyResource[]>([]);
+  const [isActivatingEmergency, setIsActivatingEmergency] = useState(false);
+  const [isUpdatingEmergency, setIsUpdatingEmergency] = useState(false);
+  const [emergencyError, setEmergencyError] = useState<string | null>(null);
+  const [emergencyMessage, setEmergencyMessage] = useState<string | null>(null);
+  const [isCompletingTrip, setIsCompletingTrip] = useState(false);
+  const [tripHistory, setTripHistory] = useState<SafeTripHistoryItem[] | null>(null);
+  const [isLoadingTripHistory, setIsLoadingTripHistory] = useState(false);
+  const [tripHistoryError, setTripHistoryError] = useState<string | null>(null);
+  const [trustedContacts, setTrustedContacts] = useState<TrustedContact[] | null>(null);
+  const [isLoadingTrustedContacts, setIsLoadingTrustedContacts] = useState(false);
+  const [trustedContactsError, setTrustedContactsError] = useState<string | null>(null);
+  const [trustedContactsMessage, setTrustedContactsMessage] = useState<string | null>(null);
+  const [contactName, setContactName] = useState("");
+  const [contactMethod, setContactMethod] = useState<TrustedContact["contact_method"]>("email");
+  const [contactValue, setContactValue] = useState("");
+  const [isAddingContact, setIsAddingContact] = useState(false);
+  const [removingContactId, setRemovingContactId] = useState<string | null>(null);
+  const [editingContactId, setEditingContactId] = useState<string | null>(null);
+  const [editContactName, setEditContactName] = useState("");
+  const [editContactMethod, setEditContactMethod] = useState<TrustedContact["contact_method"]>("email");
+  const [editContactValue, setEditContactValue] = useState("");
+  const [isUpdatingContact, setIsUpdatingContact] = useState(false);
+  const [contactPreferences, setContactPreferences] = useState<Record<string, TrustedContactSharingPreferences>>({});
+  const [loadingPreferenceId, setLoadingPreferenceId] = useState<string | null>(null);
+  const [savingPreferenceId, setSavingPreferenceId] = useState<string | null>(null);
+  const [tripTrustedContacts, setTripTrustedContacts] = useState<SafeTripTrustedContact[] | null>(null);
+  const [isLoadingTripTrustedContacts, setIsLoadingTripTrustedContacts] = useState(false);
+  const [tripTrustedContactsError, setTripTrustedContactsError] = useState<string | null>(null);
+  const [tripContactActionId, setTripContactActionId] = useState<string | null>(null);
 
   function requestLocation() {
     if (!navigator.geolocation) {
@@ -173,6 +243,13 @@ export default function HomePage() {
     setCreatedTrip(null);
     setTripError(null);
     setLocationUpdateMessage(null);
+    setDeviationAssessment(null);
+    setDeviationError(null);
+    setLastCheckIn(null);
+    setCheckInError(null);
+    setEmergency(null);
+    setEmergencyError(null);
+    setEmergencyMessage(null);
     if (!currentLocation) {
       setError("Select your current location before requesting a route.");
       return false;
@@ -210,13 +287,23 @@ export default function HomePage() {
   const selectedRoute = routeResponse?.routes.find(
     (route) => route.route_id === routeResponse.selected_route_id,
   ) ?? null;
+  const activeTrip = createdTrip?.status === "active" ? createdTrip : null;
+  const tripHasJourneyStatus = createdTrip?.status === "active" || createdTrip?.status === "completed";
 
   async function handleCreateSafeTrip() {
     if (!selectedRoute) return;
     setIsCreatingTrip(true);
     setTripError(null);
+    setDeviationAssessment(null);
+    setDeviationError(null);
+    setLastCheckIn(null);
+    setCheckInError(null);
+    setTripTrustedContacts(null);
+    setTripTrustedContactsError(null);
     try {
-      setCreatedTrip(await createSafeTrip(selectedRoute, expectedArrival));
+      const trip = await createSafeTrip(selectedRoute, expectedArrival);
+      setCreatedTrip(trip);
+      await loadSafeTripTrustedContacts(trip.id);
     } catch (createError) {
       setTripError(createError instanceof Error ? createError.message : "The Safe Trip could not be created.");
     } finally {
@@ -228,12 +315,293 @@ export default function HomePage() {
     if (!createdTrip || createdTrip.status !== "planned") return;
     setIsStartingTrip(true);
     setTripError(null);
+    setDeviationAssessment(null);
+    setDeviationError(null);
+    setLastCheckIn(null);
+    setCheckInError(null);
     try {
-      setCreatedTrip(await startSafeTrip(createdTrip.id));
+      const trip = await startSafeTrip(createdTrip.id);
+      setCreatedTrip(trip);
+      await loadSafeTripTrustedContacts(trip.id);
     } catch (startError) {
       setTripError(startError instanceof Error ? startError.message : "The Safe Trip could not be started.");
     } finally {
       setIsStartingTrip(false);
+    }
+  }
+
+  async function refreshDeviation(tripId: string) {
+    setIsCheckingDeviation(true);
+    setDeviationError(null);
+    try {
+      setDeviationAssessment(await getSafeTripDeviation(tripId));
+    } catch (deviationRequestError) {
+      setDeviationAssessment(null);
+      setDeviationError(
+        deviationRequestError instanceof Error ? deviationRequestError.message : "Could not check route status.",
+      );
+    } finally {
+      setIsCheckingDeviation(false);
+    }
+  }
+
+  async function handleCheckIn() {
+    if (!activeTrip || isCheckingIn) return;
+    setIsCheckingIn(true);
+    setCheckInError(null);
+    try {
+      setLastCheckIn(await recordSafeTripCheckIn(activeTrip.id));
+    } catch (checkInRequestError) {
+      setCheckInError(
+        checkInRequestError instanceof Error ? checkInRequestError.message : "Could not record the journey check-in.",
+      );
+    } finally {
+      setIsCheckingIn(false);
+    }
+  }
+
+  async function handleActivateEmergency() {
+    if (!activeTrip || isActivatingEmergency) return;
+    if (!window.confirm("Activate the demo emergency workflow for this active Safe Trip?")) return;
+    setIsActivatingEmergency(true);
+    setEmergencyError(null);
+    setEmergencyMessage(null);
+    try {
+      const created = await createEmergency(activeTrip.id);
+      setEmergency(created);
+      const resources = await getEmergencyResources();
+      setEmergencyResources(resources.resources);
+      setEmergencyMessage("Demo emergency workflow activated. No real emergency service or contact was notified.");
+    } catch (emergencyRequestError) {
+      setEmergencyError(emergencyRequestError instanceof Error ? emergencyRequestError.message : "Could not activate the emergency workflow.");
+    } finally {
+      setIsActivatingEmergency(false);
+    }
+  }
+
+  async function handleEmergencyTransition(action: "acknowledge" | "resolve") {
+    if (!emergency || isUpdatingEmergency) return;
+    setIsUpdatingEmergency(true);
+    setEmergencyError(null);
+    setEmergencyMessage(null);
+    try {
+      const updated = action === "acknowledge"
+        ? await acknowledgeEmergency(emergency.id)
+        : await resolveEmergency(emergency.id);
+      setEmergency(updated);
+      setEmergencyMessage(`Demo emergency marked as ${updated.status}. No external dispatch was performed.`);
+    } catch (emergencyRequestError) {
+      setEmergencyError(emergencyRequestError instanceof Error ? emergencyRequestError.message : "Could not update the emergency.");
+    } finally {
+      setIsUpdatingEmergency(false);
+    }
+  }
+
+  async function handleCompleteSafeTrip() {
+    if (!activeTrip || isCompletingTrip) return;
+    setIsCompletingTrip(true);
+    setTripError(null);
+    try {
+      setCreatedTrip(await completeSafeTrip(activeTrip.id));
+    } catch (completionError) {
+      setTripError(
+        completionError instanceof Error ? completionError.message : "Could not complete the Safe Trip.",
+      );
+    } finally {
+      setIsCompletingTrip(false);
+    }
+  }
+
+  async function loadTripHistory() {
+    setIsLoadingTripHistory(true);
+    setTripHistoryError(null);
+    try {
+      const response = await getSafeTripHistory();
+      setTripHistory(response.trips);
+    } catch (historyError) {
+      setTripHistoryError(
+        historyError instanceof Error ? historyError.message : "Could not load Safe Trip history.",
+      );
+    } finally {
+      setIsLoadingTripHistory(false);
+    }
+  }
+
+  async function loadTrustedContacts() {
+    setIsLoadingTrustedContacts(true);
+    setTrustedContactsError(null);
+    setTrustedContactsMessage(null);
+    try {
+      const response = await getTrustedContacts();
+      setTrustedContacts(response.contacts);
+    } catch (contactsError) {
+      setTrustedContactsError(
+        contactsError instanceof Error ? contactsError.message : "Could not load trusted contacts.",
+      );
+    } finally {
+      setIsLoadingTrustedContacts(false);
+    }
+  }
+
+  async function loadSafeTripTrustedContacts(tripId: string) {
+    setIsLoadingTripTrustedContacts(true);
+    setTripTrustedContactsError(null);
+    try {
+      const response = await getSafeTripTrustedContacts(tripId);
+      setTripTrustedContacts(response.contacts);
+    } catch (contactsError) {
+      setTripTrustedContactsError(
+        contactsError instanceof Error ? contactsError.message : "Could not load contacts selected for this trip.",
+      );
+    } finally {
+      setIsLoadingTripTrustedContacts(false);
+    }
+  }
+
+  async function handleTripContactToggle(contactId: string) {
+    if (!createdTrip || createdTrip.status === "completed" || tripContactActionId) return;
+    const selected = tripTrustedContacts?.some((association) => association.trusted_contact_id === contactId) ?? false;
+    setTripContactActionId(contactId);
+    setTripTrustedContactsError(null);
+    try {
+      if (selected) {
+        await removeSafeTripTrustedContact(createdTrip.id, contactId);
+        setTripTrustedContacts((current) => current?.filter((association) => association.trusted_contact_id !== contactId) ?? current);
+      } else {
+        const association = await attachSafeTripTrustedContact(createdTrip.id, contactId);
+        setTripTrustedContacts((current) => [association, ...(current ?? [])]);
+      }
+    } catch (contactsError) {
+      setTripTrustedContactsError(
+        contactsError instanceof Error ? contactsError.message : "Could not update contacts selected for this trip.",
+      );
+    } finally {
+      setTripContactActionId(null);
+    }
+  }
+
+  async function handleAddTrustedContact(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    if (isAddingContact) return;
+    setIsAddingContact(true);
+    setTrustedContactsError(null);
+    setTrustedContactsMessage(null);
+    try {
+      const contact = await createTrustedContact(contactName, contactMethod, contactValue);
+      setTrustedContacts((current) => [contact, ...(current ?? [])]);
+      setContactName("");
+      setContactValue("");
+      setTrustedContactsMessage("Trusted contact added.");
+    } catch (contactsError) {
+      setTrustedContactsError(
+        contactsError instanceof Error ? contactsError.message : "Could not add trusted contact.",
+      );
+    } finally {
+      setIsAddingContact(false);
+    }
+  }
+
+  function beginEditTrustedContact(contact: TrustedContact) {
+    setEditingContactId(contact.id);
+    setEditContactName(contact.name);
+    setEditContactMethod(contact.contact_method);
+    setEditContactValue(contact.contact_value);
+    setTrustedContactsError(null);
+  }
+
+  function cancelEditTrustedContact() {
+    setEditingContactId(null);
+    setEditContactName("");
+    setEditContactValue("");
+  }
+
+  async function handleUpdateTrustedContact(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    if (!editingContactId || isUpdatingContact) return;
+    setIsUpdatingContact(true);
+    setTrustedContactsError(null);
+    setTrustedContactsMessage(null);
+    try {
+      const contact = await updateTrustedContact(editingContactId, {
+        name: editContactName,
+        contact_method: editContactMethod,
+        contact_value: editContactValue,
+      });
+      setTrustedContacts((current) => current?.map((item) => item.id === contact.id ? contact : item) ?? current);
+      setTrustedContactsError(null);
+      setTrustedContactsMessage("Trusted contact updated.");
+      cancelEditTrustedContact();
+    } catch (contactsError) {
+      setTrustedContactsError(
+        contactsError instanceof Error ? contactsError.message : "Could not update trusted contact.",
+      );
+    } finally {
+      setIsUpdatingContact(false);
+    }
+  }
+
+  async function loadSharingPreferences(contactId: string) {
+    setLoadingPreferenceId(contactId);
+    setTrustedContactsError(null);
+    setTrustedContactsMessage(null);
+    try {
+      const preferences = await getTrustedContactSharingPreferences(contactId);
+      setContactPreferences((current) => ({ ...current, [contactId]: preferences }));
+    } catch (contactsError) {
+      setTrustedContactsError(
+        contactsError instanceof Error ? contactsError.message : "Could not load sharing preferences.",
+      );
+    } finally {
+      setLoadingPreferenceId(null);
+    }
+  }
+
+  async function toggleSharingPreference(
+    contactId: string,
+    field: "allow_trip_status" | "allow_location" | "allow_emergency",
+  ) {
+    const current = contactPreferences[contactId];
+    if (!current || savingPreferenceId) return;
+    setSavingPreferenceId(contactId);
+    setTrustedContactsError(null);
+    setTrustedContactsMessage(null);
+    try {
+      const preferences = await updateTrustedContactSharingPreferences(contactId, {
+        [field]: !current[field],
+      });
+      setContactPreferences((existing) => ({ ...existing, [contactId]: preferences }));
+      setTrustedContactsMessage("Sharing preferences updated. No notifications were sent.");
+    } catch (contactsError) {
+      setTrustedContactsError(
+        contactsError instanceof Error ? contactsError.message : "Could not update sharing preferences.",
+      );
+    } finally {
+      setSavingPreferenceId(null);
+    }
+  }
+
+  async function handleRemoveTrustedContact(contactId: string) {
+    if (removingContactId) return;
+    if (!window.confirm("Deactivate this trusted contact? Historical Safe Trip references will be preserved.")) return;
+    setRemovingContactId(contactId);
+    setTrustedContactsError(null);
+    setTrustedContactsMessage(null);
+    try {
+      await deleteTrustedContact(contactId);
+      setTrustedContacts((current) => current?.filter((contact) => contact.id !== contactId) ?? current);
+      setContactPreferences((current) => {
+        const next = { ...current };
+        delete next[contactId];
+        return next;
+      });
+      if (editingContactId === contactId) cancelEditTrustedContact();
+      setTrustedContactsMessage("Trusted contact deactivated. Historical Safe Trip references were preserved.");
+    } catch (contactsError) {
+      setTrustedContactsError(
+        contactsError instanceof Error ? contactsError.message : "Could not remove trusted contact.",
+      );
+    } finally {
+      setRemovingContactId(null);
     }
   }
 
@@ -254,8 +622,9 @@ export default function HomePage() {
           coords.longitude,
           new Date().toISOString(),
         )
-          .then((location) => {
+          .then(async (location) => {
             setLocationUpdateMessage(`Location update recorded at ${new Date(location.received_at).toLocaleTimeString()}.`);
+            await refreshDeviation(createdTrip.id);
           })
           .catch((locationError) => {
             setTripError(locationError instanceof Error ? locationError.message : "The location update could not be recorded.");
@@ -282,40 +651,31 @@ export default function HomePage() {
             <div className="rounded-xl bg-indigo-600 p-2 text-white"><ShieldCheck size={22} /></div>
             <span className="text-xl font-semibold tracking-tight">Nivara</span>
           </div>
-          <span className="rounded-full bg-indigo-50 px-3 py-1 text-xs font-medium text-indigo-700">Navigation foundation</span>
+          <span className="rounded-full bg-indigo-50 px-3 py-1 text-xs font-medium text-indigo-700">Hackathon demo · synthetic data</span>
         </header>
+
+        <SafetyControls currentLocation={currentLocation} onNavigate={(coordinate, label) => { setDestination(coordinate); setDestinationQuery(label); setDestinationSuggestions([]); setRouteResponse(null); }} />
 
         <section className="grid gap-6 lg:grid-cols-[1.15fr_0.85fr]">
           <Card className="overflow-hidden border-slate-200">
             <div className="flex h-[420px] flex-col items-center justify-center bg-slate-100 p-6">
-              <div className="relative flex min-h-0 w-full flex-1 items-center justify-center overflow-hidden rounded-xl border border-dashed border-slate-300 bg-[radial-gradient(circle_at_center,_#ffffff_0,_#f1f5f9_65%)]">
-                <Map className="text-slate-300" size={80} strokeWidth={1} />
-                {heatmap && heatmap.points.map((point) => {
-                  const left = ((point.longitude - heatmap.bounds.min_longitude) / (heatmap.bounds.max_longitude - heatmap.bounds.min_longitude)) * 100;
-                  const top = (1 - ((point.latitude - heatmap.bounds.min_latitude) / (heatmap.bounds.max_latitude - heatmap.bounds.min_latitude))) * 100;
-                  return (
-                    <div
-                      key={`${point.latitude}-${point.longitude}`}
-                      className="absolute h-12 w-12 -translate-x-1/2 -translate-y-1/2 rounded-full opacity-60 blur-sm"
-                      style={{ left: `${left}%`, top: `${top}%`, backgroundColor: heatmapColor(point) }}
-                      title={`${point.risk_level} contextual risk indicators, score ${point.risk_score}`}
-                    />
-                  );
-                })}
-                {currentLocation && (
-                  <div className="absolute left-1/2 top-1/2 flex -translate-x-1/2 -translate-y-1/2 items-center gap-2 rounded-full bg-indigo-600 px-3 py-2 text-xs font-medium text-white shadow-lg">
-                    <LocateFixed size={14} /> Current location
-                  </div>
-                )}
+              <div className="relative min-h-0 w-full flex-1">
+                <NivaraMap
+                  currentLocation={currentLocation}
+                  destination={destination}
+                  routes={routeResponse?.routes ?? []}
+                  selectedRouteId={routeResponse?.selected_route_id ?? null}
+                  heatmap={heatmap}
+                />
                 <div className="absolute bottom-3 left-3 right-3 flex items-end justify-between gap-3">
-                  <span className="rounded bg-white/90 px-2 py-1 text-xs text-slate-500 shadow-sm">Provider map surface pending</span>
+                  <span className="rounded bg-white/90 px-2 py-1 text-xs text-slate-500 shadow-sm">OpenStreetMap map tiles</span>
                   <button type="button" onClick={loadHeatmap} disabled={isLoadingHeatmap || !currentLocation} className="rounded-lg bg-white/95 px-3 py-2 text-xs font-medium text-indigo-700 shadow-sm disabled:cursor-not-allowed disabled:opacity-50">
                     {isLoadingHeatmap ? "Loading indicators…" : "Show contextual indicators"}
                   </button>
                 </div>
               </div>
               <div className="mt-3 rounded-xl border border-slate-200 bg-white p-3">
-                <p className="text-xs font-semibold text-slate-700">Contextual risk indicators</p>
+                <p className="text-xs font-semibold text-slate-700">Contextual risk indicators · DEMO DATA</p>
                 <div className="mt-2 flex flex-wrap gap-3 text-xs text-slate-600">
                   {[['#22c55e', 'LOW'], ['#eab308', 'MODERATE'], ['#f97316', 'ELEVATED'], ['#dc2626', 'HIGH']].map(([color, label]) => (
                     <span key={label} className="flex items-center gap-1.5"><span className="h-2.5 w-2.5 rounded-full" style={{ backgroundColor: color }} />{label}</span>
@@ -370,6 +730,129 @@ export default function HomePage() {
 
         <IncidentPanel currentLocation={currentLocation} onReportSubmitted={refreshAfterReport} />
 
+        <Card>
+          <CardContent>
+            <div className="flex flex-wrap items-center justify-between gap-3">
+              <div>
+                <h2 className="font-semibold">Safe Trip history</h2>
+                <p className="mt-1 text-sm text-slate-500">Review recorded journey lifecycle events. This does not include location or check-in history.</p>
+              </div>
+              <button type="button" onClick={() => void loadTripHistory()} disabled={isLoadingTripHistory} className="rounded-lg border border-indigo-200 px-3 py-2 text-sm font-semibold text-indigo-700 disabled:cursor-wait disabled:opacity-50">
+                {isLoadingTripHistory ? "Loading history…" : tripHistory ? "Refresh history" : "Load history"}
+              </button>
+            </div>
+            {tripHistoryError && <p role="alert" className="mt-3 rounded-lg bg-rose-50 px-3 py-2 text-sm text-rose-700">{tripHistoryError}</p>}
+            {!tripHistory && !tripHistoryError && <p className="mt-3 text-sm text-slate-500">Load history to review recorded Safe Trip lifecycle events.</p>}
+            {tripHistory && (() => {
+              const visibleHistory = tripHistory.filter((trip) => trip.id !== activeTrip?.id);
+              if (visibleHistory.length === 0) {
+                return <p className="mt-3 text-sm text-slate-500">No prior Safe Trips recorded.</p>;
+              }
+              return (
+                <div className="mt-4 grid gap-3 md:grid-cols-2">
+                  {visibleHistory.map((trip) => (
+                    <div key={trip.id} className="rounded-xl border border-slate-200 p-4">
+                      <div className="flex items-center justify-between gap-3">
+                        <p className="text-sm font-semibold text-slate-800">Trip {trip.id.slice(0, 8)}…</p>
+                        <span className="rounded-full bg-slate-100 px-2 py-1 text-xs font-medium text-slate-700">{formatTripStatus(trip.status)}</span>
+                      </div>
+                      <div className="mt-3 space-y-1 text-xs text-slate-600">
+                        <p>Created: {new Date(trip.created_at).toLocaleString()}</p>
+                        <p>Expected arrival: {new Date(trip.expected_arrival_at).toLocaleString()}</p>
+                        {trip.started_at && <p>Started: {new Date(trip.started_at).toLocaleString()}</p>}
+                        {trip.completed_at && <p>Completed: {new Date(trip.completed_at).toLocaleString()}</p>}
+                        <p>Origin: {formatCoordinate(trip.origin)}</p>
+                        <p>Destination: {formatCoordinate(trip.destination)}</p>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              );
+            })()}
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardContent>
+            <div className="flex flex-wrap items-center justify-between gap-3">
+              <div>
+                <h2 className="font-semibold">Trusted Contacts</h2>
+                <p className="mt-1 text-sm text-slate-500">Manage contacts that can be used by future Safe Trip notification features.</p>
+              </div>
+              <button type="button" onClick={() => void loadTrustedContacts()} disabled={isLoadingTrustedContacts} className="rounded-lg border border-indigo-200 px-3 py-2 text-sm font-semibold text-indigo-700 disabled:cursor-wait disabled:opacity-50">
+                {isLoadingTrustedContacts ? "Loading contacts…" : trustedContacts ? "Refresh contacts" : "Load contacts"}
+              </button>
+            </div>
+            <form className="mt-4 grid gap-2 sm:grid-cols-[1fr_0.8fr_1.2fr_auto]" onSubmit={handleAddTrustedContact}>
+              <input aria-label="Contact name" value={contactName} onChange={(event) => setContactName(event.target.value)} placeholder="Name" disabled={isAddingContact} className="rounded-lg border border-slate-200 px-3 py-2 text-sm outline-none ring-indigo-200 focus:ring-2 disabled:bg-slate-50" />
+              <select aria-label="Contact method" value={contactMethod} onChange={(event) => setContactMethod(event.target.value as TrustedContact["contact_method"])} disabled={isAddingContact} className="rounded-lg border border-slate-200 px-3 py-2 text-sm disabled:bg-slate-50">
+                <option value="email">Email</option>
+                <option value="phone">Phone</option>
+              </select>
+              <input aria-label="Contact value" value={contactValue} onChange={(event) => setContactValue(event.target.value)} placeholder={contactMethod === "email" ? "name@example.com" : "+91 98765 43210"} disabled={isAddingContact} className="rounded-lg border border-slate-200 px-3 py-2 text-sm outline-none ring-indigo-200 focus:ring-2 disabled:bg-slate-50" />
+              <button type="submit" disabled={isAddingContact} className="rounded-lg bg-indigo-600 px-3 py-2 text-sm font-semibold text-white disabled:cursor-wait disabled:opacity-50">{isAddingContact ? "Adding…" : "Add contact"}</button>
+            </form>
+            {trustedContactsError && <p role="alert" className="mt-3 rounded-lg bg-rose-50 px-3 py-2 text-sm text-rose-700">{trustedContactsError}</p>}
+            {trustedContactsMessage && <p role="status" className="mt-3 rounded-lg bg-emerald-50 px-3 py-2 text-sm text-emerald-800">{trustedContactsMessage}</p>}
+            {trustedContacts && trustedContacts.length === 0 && <p className="mt-4 text-sm text-slate-500">No trusted contacts recorded.</p>}
+            {trustedContacts && trustedContacts.length > 0 && <div className="mt-4 space-y-2">
+              {trustedContacts.map((contact) => (
+                <div key={contact.id} className="rounded-lg border border-slate-200 px-3 py-2.5">
+                  {editingContactId === contact.id ? (
+                    <form className="space-y-2" onSubmit={handleUpdateTrustedContact}>
+                      <div className="grid gap-2 sm:grid-cols-[1fr_0.8fr_1.2fr]">
+                        <input aria-label="Edit contact name" value={editContactName} onChange={(event) => setEditContactName(event.target.value)} disabled={isUpdatingContact} className="rounded-lg border border-slate-200 px-3 py-2 text-sm" />
+                        <select aria-label="Edit contact method" value={editContactMethod} onChange={(event) => setEditContactMethod(event.target.value as TrustedContact["contact_method"])} disabled={isUpdatingContact} className="rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm">
+                          <option value="email">Email</option>
+                          <option value="phone">Phone</option>
+                        </select>
+                        <input aria-label="Edit contact value" value={editContactValue} onChange={(event) => setEditContactValue(event.target.value)} disabled={isUpdatingContact} className="rounded-lg border border-slate-200 px-3 py-2 text-sm" />
+                      </div>
+                      <div className="flex gap-3">
+                        <button type="submit" disabled={isUpdatingContact} className="rounded-lg bg-indigo-600 px-3 py-2 text-xs font-semibold text-white disabled:cursor-wait disabled:opacity-50">{isUpdatingContact ? "Saving…" : "Save changes"}</button>
+                        <button type="button" onClick={cancelEditTrustedContact} disabled={isUpdatingContact} className="rounded-lg border border-slate-200 px-3 py-2 text-xs font-semibold text-slate-700 disabled:opacity-50">Cancel</button>
+                      </div>
+                    </form>
+                  ) : (
+                    <div className="flex flex-wrap items-center justify-between gap-3">
+                      <div>
+                        <p className="text-sm font-medium text-slate-800">{contact.name}</p>
+                        <p className="text-xs text-slate-600">{contact.contact_method === "email" ? "Email" : "Phone"}: {contact.contact_value}</p>
+                      </div>
+                      <div className="flex gap-3">
+                        <button type="button" onClick={() => beginEditTrustedContact(contact)} disabled={Boolean(removingContactId) || Boolean(savingPreferenceId)} className="text-xs font-semibold text-indigo-700 underline disabled:opacity-50">Edit</button>
+                        <button type="button" onClick={() => void handleRemoveTrustedContact(contact.id)} disabled={removingContactId === contact.id || Boolean(isUpdatingContact)} className="text-xs font-semibold text-slate-600 underline disabled:cursor-wait disabled:opacity-50">{removingContactId === contact.id ? "Removing…" : "Remove contact"}</button>
+                      </div>
+                    </div>
+                  )}
+                  <div className="mt-3 border-t border-slate-100 pt-3">
+                    <div className="flex flex-wrap items-center justify-between gap-2">
+                      <p className="text-xs font-semibold text-slate-700">Sharing preferences</p>
+                      {!contactPreferences[contact.id] && <button type="button" onClick={() => void loadSharingPreferences(contact.id)} disabled={loadingPreferenceId === contact.id} className="text-xs font-semibold text-indigo-700 underline disabled:opacity-50">{loadingPreferenceId === contact.id ? "Loading…" : "Load settings"}</button>}
+                    </div>
+                    {contactPreferences[contact.id] && (
+                      <div className="mt-2 space-y-2 text-xs text-slate-700">
+                        <p className="text-slate-500">These settings control future supported sharing workflows. No notifications are sent yet.</p>
+                        {([
+                          ["allow_trip_status", "Allow trip status updates"],
+                          ["allow_location", "Allow location sharing"],
+                          ["allow_emergency", "Allow emergency alerts"],
+                        ] as const).map(([field, label]) => (
+                          <label key={field} className="flex items-center gap-2">
+                            <input type="checkbox" checked={contactPreferences[contact.id][field]} onChange={() => void toggleSharingPreference(contact.id, field)} disabled={savingPreferenceId === contact.id} className="h-4 w-4 accent-indigo-600" />
+                            <span>{label}</span>
+                            {savingPreferenceId === contact.id && <span className="text-slate-400">Saving…</span>}
+                          </label>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                </div>
+              ))}
+            </div>}
+          </CardContent>
+        </Card>
+
         {routeResponse && (
           <Card>
             <CardContent>
@@ -404,11 +887,130 @@ export default function HomePage() {
                     </div>
                     {tripError && <p role="alert" className="mt-2 text-xs text-rose-700">{tripError}</p>}
                     {createdTrip && <div className="mt-2 flex flex-wrap items-center justify-between gap-2 text-xs text-emerald-700">
-                      <p role="status">Safe Trip is {createdTrip.status}. Expected arrival: {new Date(createdTrip.expected_arrival_at).toLocaleString()}{createdTrip.started_at ? ` Started at ${new Date(createdTrip.started_at).toLocaleString()}.` : ""}</p>
+                      <p role="status">Safe Trip is {createdTrip.status}. Expected arrival: {new Date(createdTrip.expected_arrival_at).toLocaleString()}{createdTrip.started_at ? ` Started at ${new Date(createdTrip.started_at).toLocaleString()}.` : ""}{createdTrip.completed_at ? ` Completed at ${new Date(createdTrip.completed_at).toLocaleString()}.` : ""}</p>
                       {createdTrip.status === "planned" && <button type="button" onClick={() => void handleStartSafeTrip()} disabled={isStartingTrip} className="rounded-lg bg-emerald-600 px-3 py-2 font-semibold text-white disabled:cursor-wait disabled:opacity-50">{isStartingTrip ? "Starting…" : "Start Trip"}</button>}
-                      {createdTrip.status === "active" && <button type="button" onClick={handleRecordCurrentLocation} disabled={isRecordingLocation} className="rounded-lg bg-indigo-600 px-3 py-2 font-semibold text-white disabled:cursor-wait disabled:opacity-50">{isRecordingLocation ? "Recording…" : "Record current location"}</button>}
+                      {createdTrip.status === "active" && <div className="flex flex-wrap gap-2">
+                        <button type="button" onClick={handleRecordCurrentLocation} disabled={isRecordingLocation} className="rounded-lg bg-indigo-600 px-3 py-2 font-semibold text-white disabled:cursor-wait disabled:opacity-50">{isRecordingLocation ? "Recording…" : "Record current location"}</button>
+                        <button type="button" onClick={() => void handleCheckIn()} disabled={isCheckingIn} className="rounded-lg border border-emerald-300 bg-white px-3 py-2 font-semibold text-emerald-700 disabled:cursor-wait disabled:opacity-50">{isCheckingIn ? "Checking in…" : "Check in"}</button>
+                        <button type="button" onClick={() => void handleCompleteSafeTrip()} disabled={isCompletingTrip} className="rounded-lg border border-slate-300 bg-white px-3 py-2 font-semibold text-slate-700 disabled:cursor-wait disabled:opacity-50">{isCompletingTrip ? "Completing…" : "Complete Safe Trip"}</button>
+                      </div>}
                     </div>}
+                    {createdTrip && (
+                      <div className="mt-3 rounded-lg border border-indigo-100 bg-indigo-50/40 p-3">
+                        <div className="flex flex-wrap items-start justify-between gap-3">
+                          <div>
+                            <p className="text-sm font-semibold text-slate-800">Trusted contacts selected for this trip</p>
+                            <p className="mt-1 text-xs text-slate-600">Selection is saved for future Safe Trip features. No notifications are sent.</p>
+                          </div>
+                          <button
+                            type="button"
+                            onClick={() => { void loadTrustedContacts(); void loadSafeTripTrustedContacts(createdTrip.id); }}
+                            disabled={isLoadingTrustedContacts || isLoadingTripTrustedContacts}
+                            className="rounded-lg border border-indigo-200 bg-white px-3 py-2 text-xs font-semibold text-indigo-700 disabled:cursor-wait disabled:opacity-50"
+                          >
+                            {isLoadingTrustedContacts || isLoadingTripTrustedContacts ? "Loading contacts…" : trustedContacts ? "Refresh selections" : "Load contacts"}
+                          </button>
+                        </div>
+                        {tripTrustedContactsError && <p role="alert" className="mt-2 text-xs text-rose-700">{tripTrustedContactsError}</p>}
+                        {createdTrip.status === "completed" && <p className="mt-2 text-xs text-slate-500">Contact selection is read-only after the Safe Trip is completed.</p>}
+                        {trustedContacts && trustedContacts.length === 0 && <p className="mt-3 text-sm text-slate-500">No active trusted contacts are available. Add one in the Trusted Contacts section below.</p>}
+                        {trustedContacts && trustedContacts.length > 0 && (
+                          <div className="mt-3 space-y-2">
+                            {trustedContacts.map((contact) => {
+                              const selected = tripTrustedContacts?.some((association) => association.trusted_contact_id === contact.id) ?? false;
+                              const actionInFlight = tripContactActionId === contact.id;
+                              return (
+                                <label key={contact.id} className="flex items-center justify-between gap-3 rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm">
+                                  <span>
+                                    <span className="block font-medium text-slate-800">{contact.name}</span>
+                                    <span className="block text-xs text-slate-500">{contact.contact_method === "email" ? "Email" : "Phone"}: {contact.contact_value}</span>
+                                  </span>
+                                  <input
+                                    type="checkbox"
+                                    checked={selected}
+                                    onChange={() => void handleTripContactToggle(contact.id)}
+                                    disabled={createdTrip.status === "completed" || Boolean(tripContactActionId)}
+                                    aria-label={`${selected ? "Remove" : "Select"} ${contact.name} for this Safe Trip`}
+                                    className="h-4 w-4 accent-indigo-600"
+                                  />
+                                  {actionInFlight && <span className="text-xs text-slate-500">Updating…</span>}
+                                </label>
+                              );
+                            })}
+                          </div>
+                        )}
+                        {tripTrustedContacts && tripTrustedContacts.length > 0 && (
+                          <p className="mt-2 text-xs text-slate-600">{tripTrustedContacts.length} contact(s) selected for this trip.</p>
+                        )}
+                      </div>
+                    )}
                     {locationUpdateMessage && <p role="status" className="mt-2 text-xs text-emerald-700">{locationUpdateMessage}</p>}
+                    {tripHasJourneyStatus && (
+                      <div className="mt-3 rounded-lg border border-slate-200 bg-slate-50 p-3" aria-live="polite">
+                        {lastCheckIn ? (
+                          <p role="status" className="text-sm text-slate-700">Journey check-in recorded at {new Date(lastCheckIn.checked_in_at).toLocaleTimeString()}.</p>
+                        ) : (
+                          <p className="text-sm text-slate-600">No recent check-in recorded.</p>
+                        )}
+                        {checkInError && <p role="alert" className="mt-2 text-xs text-rose-700">{checkInError}</p>}
+                      </div>
+                    )}
+                    {createdTrip?.status === "active" && (
+                      <div className="mt-4 rounded-lg border border-rose-200 bg-rose-50/60 p-3" aria-live="polite">
+                        <p className="text-sm font-semibold text-rose-900">Demo emergency workflow</p>
+                        <p className="mt-1 text-xs text-rose-800">Use SOS only as an explicit demo action. It does not contact emergency services or send real notifications.</p>
+                        {!emergency && <button type="button" onClick={() => void handleActivateEmergency()} disabled={isActivatingEmergency} className="mt-3 rounded-lg bg-rose-600 px-3 py-2 text-sm font-semibold text-white disabled:cursor-wait disabled:opacity-50">{isActivatingEmergency ? "Activating…" : "SOS"}</button>}
+                        {emergency && <div className="mt-3 space-y-2 text-sm text-slate-700">
+                          <p className="font-semibold">Emergency status: {emergency.status}</p>
+                          <p className="text-xs">Created at {new Date(emergency.created_at).toLocaleString()} · location: {emergency.latitude === null ? "unavailable" : "recorded"} · notification: {emergency.sharing_status === "sharing_disabled" ? "sharing disabled" : "demo notification only"}</p>
+                          <div className="flex flex-wrap gap-2">
+                            {emergency.status === "active" && <button type="button" onClick={() => void handleEmergencyTransition("acknowledge")} disabled={isUpdatingEmergency} className="rounded-lg border border-amber-300 bg-white px-3 py-2 text-xs font-semibold text-amber-800 disabled:opacity-50">{isUpdatingEmergency ? "Updating…" : "Acknowledge"}</button>}
+                            {emergency.status !== "resolved" && <button type="button" onClick={() => void handleEmergencyTransition("resolve")} disabled={isUpdatingEmergency} className="rounded-lg border border-slate-300 bg-white px-3 py-2 text-xs font-semibold text-slate-700 disabled:opacity-50">Resolve</button>}
+                          </div>
+                          {emergencyResources.length > 0 && <div className="border-t border-rose-200 pt-2"><p className="text-xs font-semibold">Demo resource placeholders</p>{emergencyResources.map((resource) => <p key={resource.id} className="text-xs text-slate-600">{resource.name}: {resource.description}</p>)}</div>}
+                        </div>}
+                        {emergencyMessage && <p role="status" className="mt-2 text-xs text-emerald-700">{emergencyMessage}</p>}
+                        {emergencyError && <p role="alert" className="mt-2 text-xs text-rose-700">{emergencyError}</p>}
+                      </div>
+                    )}
+                    {tripHasJourneyStatus && (
+                      <div className="mt-4 border-t border-indigo-200 pt-4" aria-live="polite">
+                        <div className="flex items-center justify-between gap-3">
+                          <div>
+                            <p className="text-sm font-semibold text-slate-800">Route status</p>
+                            <p className="mt-1 text-xs text-slate-500">Based on your latest recorded location.</p>
+                          </div>
+                          {activeTrip && <button
+                            type="button"
+                            onClick={() => void refreshDeviation(activeTrip.id)}
+                            disabled={isCheckingDeviation}
+                            className="rounded-lg border border-indigo-200 px-3 py-2 text-xs font-semibold text-indigo-700 disabled:cursor-wait disabled:opacity-50"
+                          >
+                            {isCheckingDeviation ? "Checking…" : "Refresh status"}
+                          </button>}
+                        </div>
+                        {isCheckingDeviation && <p role="status" className="mt-3 text-sm text-slate-600">Checking route status…</p>}
+                        {!isCheckingDeviation && deviationAssessment && (
+                          <div className={`mt-3 rounded-lg border p-3 ${deviationAssessment.deviated ? "border-amber-300 bg-amber-50" : "border-emerald-200 bg-emerald-50"}`}>
+                            <p className={`text-sm font-semibold ${deviationAssessment.deviated ? "text-amber-900" : "text-emerald-900"}`}>
+                              {deviationAssessment.deviated ? "Route deviation detected" : "Within planned route corridor"}
+                            </p>
+                            <div className="mt-2 space-y-1 text-xs text-slate-700">
+                              <p>Distance from planned route: {deviationAssessment.distance_from_route_meters.toFixed(1)} m</p>
+                              <p>Configured corridor: {deviationAssessment.threshold_meters.toFixed(1)} m</p>
+                              <p>{deviationAssessment.explanation}</p>
+                              <p>Evaluated at {new Date(deviationAssessment.evaluated_at).toLocaleTimeString()}.</p>
+                            </div>
+                          </div>
+                        )}
+                        {!isCheckingDeviation && !deviationAssessment && (
+                          <div className="mt-3 rounded-lg border border-slate-200 bg-slate-50 p-3">
+                            <p className="text-sm text-slate-700">{deviationError ?? "Route status is unavailable until a location is recorded."}</p>
+                            {deviationError && activeTrip && <button type="button" onClick={() => void refreshDeviation(activeTrip.id)} className="mt-2 text-xs font-semibold text-indigo-700 underline">Try again</button>}
+                          </div>
+                        )}
+                      </div>
+                    )}
                   </div>
                 </div>
               )}
