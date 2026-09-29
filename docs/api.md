@@ -367,6 +367,28 @@ Complete a Safe Trip.
 
 ---
 
+GET /trips/{trip_id}/deviation
+
+Purpose:
+
+Evaluate the latest recorded location of an active Safe Trip against its
+stored planned route geometry.
+
+Implemented contract: `GET /api/v1/trips/{trip_id}/deviation`.
+
+The response contains the trip ID, whether the latest location is outside the
+configured route corridor, distance from the planned route in metres, the
+configured threshold, the location update used, evaluation time, and a
+contextual explanation. The current implementation uses the latest recorded
+location only; it does not persist deviation state or apply hysteresis.
+
+Active trips with no recorded location return `409` because deviation status
+is unavailable. Missing trips return `404`, and planned or completed trips
+return `409`. Deviation is route-adherence information, not a safety score or
+an emergency determination.
+
+---
+
 ## Trusted Contacts
 
 GET /trusted-contacts

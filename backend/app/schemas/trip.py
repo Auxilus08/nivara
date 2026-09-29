@@ -63,3 +63,13 @@ class SafeTripLocationResponse(BaseModel):
     longitude: float
     recorded_at: datetime
     received_at: datetime
+
+
+class DeviationAssessment(BaseModel):
+    trip_id: UUID
+    deviated: bool
+    distance_from_route_meters: float = Field(ge=0)
+    threshold_meters: float = Field(gt=0)
+    based_on_location_id: UUID
+    evaluated_at: datetime
+    explanation: str

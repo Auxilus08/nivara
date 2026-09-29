@@ -20,6 +20,7 @@ class Settings(BaseSettings):
     routing_provider: str = Field(default="openrouteservice")
     routing_api_key: str | None = Field(default=None)
     route_corridor_radius_meters: float = Field(default=100.0, ge=25.0, le=1000.0)
+    deviation_corridor_threshold_meters: float = Field(default=500.0, ge=25.0, le=5000.0)
     ai_api_key: str | None = None
     notification_provider: str | None = None
     notification_api_key: str | None = None

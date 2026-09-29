@@ -65,7 +65,7 @@ Status values:
 - [x] T051 Safe Trip creation
 - [x] T052 Safe Trip start
 - [x] T053 Location tracking
-- [ ] T054 Route deviation detection
+- [x] T054 Route deviation detection
 - [ ] T055 Deviation UI
 - [ ] T056 Check-in
 - [ ] T057 Trip completion

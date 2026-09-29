@@ -421,3 +421,32 @@ The next logical task is T054 — route deviation detection. Live
 PostgreSQL/PostGIS and real GPS tracking remain unvalidated in this
 environment; tests use in-process repositories and the frontend manual
 location action was not exercised against a live browser or backend.
+
+## T054 Handoff
+
+T054 is complete. The backend now exposes
+`GET /api/v1/trips/{trip_id}/deviation`. It evaluates only active trips and
+uses the latest T053 location ordered by recorded time, then received time,
+against the selected route geometry stored in the Safe Trip snapshot. Distance
+is calculated by a PostGIS geography `ST_Distance` query in metres.
+
+The configurable `DEVIATION_CORRIDOR_THRESHOLD_METERS` setting defaults to
+500 metres as an engineering heuristic. A distance strictly greater than the
+threshold is reported as `deviated`; equality remains within the corridor.
+No deviation state, consecutive-observation persistence, hysteresis,
+notifications, check-ins, or UI feedback was added. Missing location data is
+an explicit `409` unavailable state and is never interpreted as within route.
+
+Files modified:
+
+- `backend/app/schemas/trip.py`
+- `backend/app/services/trips.py`
+- `backend/app/repositories/trip_location.py`
+- `backend/app/api/routes/trips.py`
+- `backend/app/core/config.py`
+- `.env.example`
+- `backend/tests/test_trips.py`
+- `docs/tasks.md`, `docs/api.md`, `docs/architecture.md`, and `docs/transfer.md`
+
+T055 remains responsible for presenting this assessment to users. The next
+recommended task is T055 — Safe Trip deviation UI/alerts.

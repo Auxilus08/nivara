@@ -7,7 +7,9 @@ from app.models.trip import SafeTrip, SafeTripStatus
 from app.models.trip import SafeTripLocation
 from app.repositories.trip import SafeTripRepository
 from app.repositories.trip_location import SafeTripLocationRepository
+from app.schemas.routes import Coordinate
 from app.schemas.trip import (
+    DeviationAssessment,
     SafeTripCreate,
     SafeTripLocationCreate,
     SafeTripLocationResponse,
@@ -113,3 +115,40 @@ class SafeTripLocationService:
             received_at=datetime.now(timezone.utc),
         )
         return location_to_response(await self.location_repository.create(location))
+
+
+class SafeTripDeviationService:
+    def __init__(self, trip_repository: SafeTripRepository, location_repository: SafeTripLocationRepository, threshold_meters: float):
+        self.trip_repository = trip_repository
+        self.location_repository = location_repository
+        self.threshold_meters = threshold_meters
+
+    async def evaluate_trip(self, trip_id: UUID) -> DeviationAssessment:
+        trip = await self.trip_repository.get_by_id(trip_id)
+        if trip is None:
+            raise SafeTripNotFoundError("Safe Trip not found")
+        if trip.status != SafeTripStatus.ACTIVE.value:
+            raise SafeTripInvalidStateError(
+                f"Safe Trip deviation cannot be evaluated from status '{trip.status}'"
+            )
+
+        location = await self.location_repository.get_latest_for_trip(trip_id)
+        if location is None:
+            raise SafeTripInvalidStateError("Safe Trip has no recorded location to evaluate")
+
+        coordinates = [Coordinate.model_validate(point) for point in trip.route_geometry]
+        distance = await self.location_repository.distance_from_route_meters(location, coordinates)
+        deviated = distance > self.threshold_meters
+        if deviated:
+            explanation = "The latest recorded location is outside the configured route corridor."
+        else:
+            explanation = "The latest recorded location is within the configured route corridor."
+        return DeviationAssessment(
+            trip_id=trip_id,
+            deviated=deviated,
+            distance_from_route_meters=round(distance, 2),
+            threshold_meters=self.threshold_meters,
+            based_on_location_id=location.id,
+            evaluated_at=datetime.now(timezone.utc),
+            explanation=explanation,
+        )

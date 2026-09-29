@@ -5,10 +5,18 @@ from fastapi import APIRouter, Depends, HTTPException, status
 from app.api.dependencies import get_safe_trip_location_repository, get_safe_trip_repository
 from app.repositories.trip import SafeTripRepository
 from app.repositories.trip_location import SafeTripLocationRepository
-from app.schemas.trip import SafeTripCreate, SafeTripLocationCreate, SafeTripLocationResponse, SafeTripResponse
+from app.schemas.trip import (
+    DeviationAssessment,
+    SafeTripCreate,
+    SafeTripLocationCreate,
+    SafeTripLocationResponse,
+    SafeTripResponse,
+)
+from app.core.config import get_settings
 from app.services.trips import (
     SafeTripInvalidStateError,
     SafeTripLocationService,
+    SafeTripDeviationService,
     SafeTripNotFoundError,
     SafeTripService,
 )
@@ -49,6 +57,25 @@ async def record_safe_trip_location(
 ) -> SafeTripLocationResponse:
     try:
         return await SafeTripLocationService(trip_repository, location_repository).record(trip_id, request)
+    except SafeTripNotFoundError as exc:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(exc)) from exc
+    except SafeTripInvalidStateError as exc:
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(exc)) from exc
+
+
+@router.get("/{trip_id}/deviation", response_model=DeviationAssessment)
+async def evaluate_safe_trip_deviation(
+    trip_id: UUID,
+    trip_repository: SafeTripRepository = Depends(get_safe_trip_repository),
+    location_repository: SafeTripLocationRepository = Depends(get_safe_trip_location_repository),
+) -> DeviationAssessment:
+    try:
+        settings = get_settings()
+        return await SafeTripDeviationService(
+            trip_repository,
+            location_repository,
+            settings.deviation_corridor_threshold_meters,
+        ).evaluate_trip(trip_id)
     except SafeTripNotFoundError as exc:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(exc)) from exc
     except SafeTripInvalidStateError as exc:

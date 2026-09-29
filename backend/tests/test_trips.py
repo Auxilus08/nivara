@@ -8,6 +8,7 @@ import pytest
 from app.api.dependencies import get_safe_trip_location_repository, get_safe_trip_repository
 from app.main import app
 from app.models.trip import SafeTrip, SafeTripLocation, SafeTripStatus
+from app.services.trips import SafeTripDeviationService
 
 
 class FakeSafeTripRepository:
@@ -30,12 +31,22 @@ class FakeSafeTripRepository:
 class FakeSafeTripLocationRepository:
     def __init__(self):
         self.locations: list[SafeTripLocation] = []
+        self.distance_value = 100.0
+        self.received_coordinates = None
 
     async def create(self, location: SafeTripLocation) -> SafeTripLocation:
         if location.received_at is None:
             location.received_at = datetime.now(timezone.utc)
         self.locations.append(location)
         return location
+
+    async def get_latest_for_trip(self, trip_id):
+        matching = [location for location in self.locations if location.trip_id == trip_id]
+        return max(matching, key=lambda location: (location.recorded_at, location.received_at), default=None)
+
+    async def distance_from_route_meters(self, location, coordinates):
+        self.received_coordinates = coordinates
+        return self.distance_value
 
 
 def trip_payload(expected_arrival_at: str):
@@ -79,6 +90,18 @@ def stored_trip(status: str = SafeTripStatus.PLANNED.value, started_at: datetime
 
 def location_payload(recorded_at: str):
     return {"latitude": 12.968, "longitude": 77.598, "recorded_at": recorded_at}
+
+
+def stored_location(trip_id, recorded_at: datetime, latitude: float = 12.968) -> SafeTripLocation:
+    return SafeTripLocation(
+        id=uuid4(),
+        trip_id=trip_id,
+        latitude=latitude,
+        longitude=77.598,
+        location=None,
+        recorded_at=recorded_at,
+        received_at=recorded_at + timedelta(seconds=1),
+    )
 
 
 def location_overrides(trip_repository, location_repository):
@@ -401,3 +424,117 @@ def test_location_migration_uses_dedicated_postgis_table_and_indexes():
     assert '"ix_safe_trip_locations_recorded_at"' in source
     assert '"ix_safe_trip_locations_location_gist"' in source
     assert '"route_geometry"' not in source
+
+
+@pytest.mark.asyncio
+async def test_active_trip_deviation_uses_latest_location_and_returns_minimal_assessment():
+    trip_repository = FakeSafeTripRepository()
+    location_repository = FakeSafeTripLocationRepository()
+    trip = stored_trip(status=SafeTripStatus.ACTIVE.value, started_at=datetime.now(timezone.utc))
+    trip_repository.trips.append(trip)
+    older = stored_location(trip.id, datetime.now(timezone.utc) - timedelta(minutes=2), latitude=13.1)
+    newer = stored_location(trip.id, datetime.now(timezone.utc) - timedelta(minutes=1))
+    location_repository.locations.extend([older, newer])
+    location_repository.distance_value = 742.5
+    location_overrides(trip_repository, location_repository)
+    try:
+        transport = httpx.ASGITransport(app=app)
+        async with httpx.AsyncClient(transport=transport, base_url="http://test") as client:
+            response = await client.get(f"/api/v1/trips/{trip.id}/deviation")
+    finally:
+        app.dependency_overrides.clear()
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["trip_id"] == str(trip.id)
+    assert body["deviated"] is True
+    assert body["distance_from_route_meters"] == 742.5
+    assert body["threshold_meters"] == 500.0
+    assert body["based_on_location_id"] == str(newer.id)
+    assert "outside the configured route corridor" in body["explanation"]
+    assert [point.model_dump() for point in location_repository.received_coordinates] == trip.route_geometry
+    assert set(body) == {
+        "trip_id", "deviated", "distance_from_route_meters", "threshold_meters",
+        "based_on_location_id", "evaluated_at", "explanation",
+    }
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("state", [SafeTripStatus.PLANNED.value, SafeTripStatus.COMPLETED.value])
+async def test_deviation_evaluation_rejects_inactive_trip(state: str):
+    trip_repository = FakeSafeTripRepository()
+    location_repository = FakeSafeTripLocationRepository()
+    trip = stored_trip(status=state)
+    trip_repository.trips.append(trip)
+    location_overrides(trip_repository, location_repository)
+    try:
+        transport = httpx.ASGITransport(app=app)
+        async with httpx.AsyncClient(transport=transport, base_url="http://test") as client:
+            response = await client.get(f"/api/v1/trips/{trip.id}/deviation")
+    finally:
+        app.dependency_overrides.clear()
+
+    assert response.status_code == 409
+    assert "cannot be evaluated" in response.json()["detail"]
+
+
+@pytest.mark.asyncio
+async def test_deviation_evaluation_returns_not_found_for_unknown_trip():
+    trip_repository = FakeSafeTripRepository()
+    location_repository = FakeSafeTripLocationRepository()
+    location_overrides(trip_repository, location_repository)
+    try:
+        transport = httpx.ASGITransport(app=app)
+        async with httpx.AsyncClient(transport=transport, base_url="http://test") as client:
+            response = await client.get(f"/api/v1/trips/{uuid4()}/deviation")
+    finally:
+        app.dependency_overrides.clear()
+
+    assert response.status_code == 404
+
+
+@pytest.mark.asyncio
+async def test_active_trip_without_location_is_explicitly_unavailable():
+    trip_repository = FakeSafeTripRepository()
+    location_repository = FakeSafeTripLocationRepository()
+    trip_repository.trips.append(stored_trip(status=SafeTripStatus.ACTIVE.value))
+    location_overrides(trip_repository, location_repository)
+    try:
+        trip = trip_repository.trips[0]
+        transport = httpx.ASGITransport(app=app)
+        async with httpx.AsyncClient(transport=transport, base_url="http://test") as client:
+            response = await client.get(f"/api/v1/trips/{trip.id}/deviation")
+    finally:
+        app.dependency_overrides.clear()
+
+    assert response.status_code == 409
+    assert "no recorded location" in response.json()["detail"]
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("distance, expected", [(500.0, False), (500.01, True)])
+async def test_deviation_threshold_boundary_is_deterministic(distance: float, expected: bool):
+    trip_repository = FakeSafeTripRepository()
+    location_repository = FakeSafeTripLocationRepository()
+    trip = stored_trip(status=SafeTripStatus.ACTIVE.value)
+    trip_repository.trips.append(trip)
+    location_repository.locations.append(stored_location(trip.id, datetime.now(timezone.utc)))
+    location_repository.distance_value = distance
+
+    assessment = await SafeTripDeviationService(
+        trip_repository,
+        location_repository,
+        threshold_meters=500.0,
+    ).evaluate_trip(trip.id)
+
+    assert assessment.deviated is expected
+
+
+def test_deviation_repository_uses_metric_postgis_distance_and_planned_geometry():
+    source = Path(__file__).parents[1].joinpath("app", "repositories", "trip_location.py").read_text()
+
+    assert "ST_Distance" in source
+    assert "Geography" in source
+    assert "LINESTRING(" in source
+    assert "coordinate.longitude" in source
+    assert "coordinate.latitude" in source

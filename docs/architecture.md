@@ -368,8 +368,12 @@ transition: `planned -> active`, with a server-generated timezone-aware
 through this transition. T053 stores each active-trip location update in the
 separate `safe_trip_locations` PostGIS-backed table. It preserves the device
 `recorded_at` and server `received_at` timestamps and does not calculate route
-deviation, safety, or trip state. Location history retrieval, deviation
-analysis, check-ins, completion, and history remain later tasks.
+deviation, safety, or trip state. T054 evaluates the latest stored location
+against the Safe Trip snapshot's planned LineString using PostGIS geography
+distance in metres and a configurable corridor threshold. It returns a
+current-location assessment only; it does not persist deviation state or
+implement hysteresis. T055 owns user-facing deviation feedback. Location
+history retrieval, check-ins, completion, and history remain later tasks.
 
 ---
 
