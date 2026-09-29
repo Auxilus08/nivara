@@ -39,5 +39,27 @@ class SafeTripResponse(BaseModel):
     geometry: RouteGeometry
     expected_arrival_at: datetime
     status: str
+    started_at: datetime | None
     created_at: datetime
 
+
+class SafeTripLocationCreate(BaseModel):
+    latitude: float = Field(ge=-90, le=90)
+    longitude: float = Field(ge=-180, le=180)
+    recorded_at: datetime
+
+    @field_validator("recorded_at")
+    @classmethod
+    def recorded_at_must_be_timezone_aware(cls, value: datetime) -> datetime:
+        if value.tzinfo is None or value.utcoffset() is None:
+            raise ValueError("recorded_at must include a timezone")
+        return value.astimezone(timezone.utc)
+
+
+class SafeTripLocationResponse(BaseModel):
+    id: UUID
+    trip_id: UUID
+    latitude: float
+    longitude: float
+    recorded_at: datetime
+    received_at: datetime

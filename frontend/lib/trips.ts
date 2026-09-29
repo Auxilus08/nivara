@@ -10,8 +10,18 @@ export type SafeTrip = {
   estimated_duration_seconds: number;
   geometry: { coordinates: Coordinate[] };
   expected_arrival_at: string;
-  status: "planned";
+  status: "planned" | "active" | "completed";
+  started_at: string | null;
   created_at: string;
+};
+
+export type SafeTripLocation = {
+  id: string;
+  trip_id: string;
+  latitude: number;
+  longitude: number;
+  recorded_at: string;
+  received_at: string;
 };
 
 export class SafeTripApiError extends Error {
@@ -48,3 +58,41 @@ export async function createSafeTrip(route: RouteCandidate, expectedArrivalAt: s
   return (await response.json()) as SafeTrip;
 }
 
+export async function startSafeTrip(tripId: string): Promise<SafeTrip> {
+  let response: Response;
+  try {
+    response = await fetch(`${apiConfig.baseUrl}/trips/${tripId}/start`, { method: "POST" });
+  } catch {
+    throw new SafeTripApiError("The Safe Trip service could not be reached.", 0);
+  }
+
+  if (!response.ok) {
+    const body = (await response.json().catch(() => null)) as { detail?: string } | null;
+    throw new SafeTripApiError(body?.detail ?? "The Safe Trip could not be started.", response.status);
+  }
+  return (await response.json()) as SafeTrip;
+}
+
+export async function recordSafeTripLocation(
+  tripId: string,
+  latitude: number,
+  longitude: number,
+  recordedAt: string,
+): Promise<SafeTripLocation> {
+  let response: Response;
+  try {
+    response = await fetch(`${apiConfig.baseUrl}/trips/${tripId}/locations`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ latitude, longitude, recorded_at: recordedAt }),
+    });
+  } catch {
+    throw new SafeTripApiError("The Safe Trip service could not be reached.", 0);
+  }
+
+  if (!response.ok) {
+    const body = (await response.json().catch(() => null)) as { detail?: string } | null;
+    throw new SafeTripApiError(body?.detail ?? "The location update could not be recorded.", response.status);
+  }
+  return (await response.json()) as SafeTripLocation;
+}

@@ -333,13 +333,91 @@ trusted contacts, notifications, privacy controls, or SOS behavior.
 
 Verification commands:
 
+- `python3 -m pip install -e '.[test]' --user` from `backend/` — passed
 - `python3 -m pytest -q tests/test_trips.py` — passed, 4 tests
-- `python3 -m pytest -q` — passed, 100 tests
+- `python3 -m pytest -q` — passed, 105 tests
+- `alembic upgrade head --sql` from `backend/` — passed; migration SQL generated without live Postgres
 - `pnpm typecheck` from `frontend/` — passed
 - `pnpm build` from `frontend/` — passed
 - `git diff --check` — passed
-- `python3 -m compileall backend` — passed
+- `python3 -m compileall backend/app backend/tests` — passed
 
 Live PostgreSQL/PostGIS and OpenRouteService remain unavailable in this
 environment; tests use in-process repositories and do not claim live
 database/provider validation.
+
+## T052 Handoff
+
+T052 is complete. Safe Trips now support the `planned`, `active`, and
+`completed` lifecycle values, with `planned -> active` as the only transition
+implemented in this task. Starting a trip records `started_at` on the server,
+preserves the route snapshot and expected arrival, and rejects duplicate or
+otherwise invalid starts. No cancellation state existed in T103, so none was
+added.
+
+Files added:
+
+- `backend/alembic/versions/0003_add_safe_trip_start.py`
+
+Files modified:
+
+- `backend/app/models/trip.py`
+- `backend/app/schemas/trip.py`
+- `backend/app/repositories/trip.py`
+- `backend/app/services/trips.py`
+- `backend/app/api/routes/trips.py`
+- `backend/tests/test_trips.py`
+- `frontend/lib/trips.ts`
+- `frontend/app/page.tsx`
+- `docs/tasks.md`, `docs/api.md`, `docs/architecture.md`, and `docs/transfer.md`
+
+T053 is the next implementation slice and is documented below. Live
+PostgreSQL/PostGIS, OpenRouteService, GPS tracking, and external notification
+integrations remain unvalidated/unimplemented.
+
+## T053 Handoff
+
+T053 is complete. Active Safe Trips can now receive individual location
+updates through a dedicated persistence entity. The service checks the trip
+exists and is `active`, validates coordinates and timezone-aware `recorded_at`,
+stores a PostGIS point with server-generated `received_at`, and returns only
+the persisted update. Planned and completed trips are rejected with `409`, and
+unknown trips return `404`.
+
+Files added:
+
+- `backend/app/repositories/trip_location.py`
+- `backend/alembic/versions/0004_create_safe_trip_locations.py`
+
+Files modified:
+
+- `backend/app/models/trip.py`
+- `backend/app/models/__init__.py`
+- `backend/app/schemas/trip.py`
+- `backend/app/api/dependencies.py`
+- `backend/app/services/trips.py`
+- `backend/app/api/routes/trips.py`
+- `backend/tests/test_trips.py`
+- `frontend/lib/trips.ts`
+- `frontend/app/page.tsx`
+- `docs/tasks.md`, `docs/api.md`, `docs/architecture.md`, and `docs/transfer.md`
+
+The frontend adds only an explicit user-triggered “Record current location”
+action for an active trip. It does not start continuous GPS collection and
+does not implement deviation detection, alerts, check-ins, completion, or
+emergency workflows.
+
+T053 verification:
+
+- `python3 -m pytest -q tests/test_trips.py` — passed, 18 tests
+- `python3 -m pytest -q` — passed, 114 tests
+- `alembic upgrade head --sql` from `backend/` — passed through migration `0004_create_safe_trip_locations`
+- `python3 -m compileall backend/app backend/tests` — passed
+- `pnpm typecheck` from `frontend/` — passed
+- `pnpm build` from `frontend/` — passed
+- `git diff --check` — passed
+
+The next logical task is T054 — route deviation detection. Live
+PostgreSQL/PostGIS and real GPS tracking remain unvalidated in this
+environment; tests use in-process repositories and the frontend manual
+location action was not exercised against a live browser or backend.

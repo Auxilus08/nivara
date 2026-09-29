@@ -316,6 +316,13 @@ Purpose:
 
 Start monitoring a Safe Trip.
 
+Implemented contract: `POST /api/v1/trips/{trip_id}/start`. The endpoint
+accepts no client timestamp or tracking payload. A persisted `planned` trip
+transitions to `active`; the server records `started_at` using a timezone-aware
+UTC timestamp and returns the complete updated trip snapshot. Missing trips
+return `404`. Starting an already active or otherwise non-planned trip returns
+`409 Conflict`. The selected route snapshot and expected arrival are unchanged.
+
 ---
 
 POST /trips/{trip_id}/check-in
@@ -323,6 +330,32 @@ POST /trips/{trip_id}/check-in
 Purpose:
 
 Record a user check-in.
+
+---
+
+POST /trips/{trip_id}/locations
+
+Purpose:
+
+Record one current location update for an active Safe Trip.
+
+Implemented contract: `POST /api/v1/trips/{trip_id}/locations`.
+
+Request:
+
+```json
+{
+  "latitude": 12.968,
+  "longitude": 77.598,
+  "recorded_at": "2026-09-29T12:00:00Z"
+}
+```
+
+Only `active` trips accept updates. Planned and completed trips return `409`;
+missing trips return `404`; invalid coordinates or timezone-naive timestamps
+return `422`. The response contains only the persisted update: its ID, trip ID,
+coordinates, device `recorded_at`, and server-generated `received_at`. It does
+not return location history or perform route-deviation or safety analysis.
 
 ---
 

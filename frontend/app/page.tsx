@@ -5,7 +5,7 @@ import { LocateFixed, Map, ShieldCheck } from "lucide-react";
 
 import { Card, CardContent } from "@/components/ui/card";
 import { IncidentPanel } from "@/components/incidents/incident-panel";
-import { createSafeTrip, type SafeTrip } from "@/lib/trips";
+import { createSafeTrip, recordSafeTripLocation, startSafeTrip, type SafeTrip } from "@/lib/trips";
 import { searchDestinations, type DestinationSuggestion } from "@/lib/geocoding";
 import {
   calculateRoutes,
@@ -73,6 +73,9 @@ export default function HomePage() {
   const [createdTrip, setCreatedTrip] = useState<SafeTrip | null>(null);
   const [isCreatingTrip, setIsCreatingTrip] = useState(false);
   const [tripError, setTripError] = useState<string | null>(null);
+  const [isStartingTrip, setIsStartingTrip] = useState(false);
+  const [isRecordingLocation, setIsRecordingLocation] = useState(false);
+  const [locationUpdateMessage, setLocationUpdateMessage] = useState<string | null>(null);
 
   function requestLocation() {
     if (!navigator.geolocation) {
@@ -169,6 +172,7 @@ export default function HomePage() {
     setRouteResponse(null);
     setCreatedTrip(null);
     setTripError(null);
+    setLocationUpdateMessage(null);
     if (!currentLocation) {
       setError("Select your current location before requesting a route.");
       return false;
@@ -218,6 +222,56 @@ export default function HomePage() {
     } finally {
       setIsCreatingTrip(false);
     }
+  }
+
+  async function handleStartSafeTrip() {
+    if (!createdTrip || createdTrip.status !== "planned") return;
+    setIsStartingTrip(true);
+    setTripError(null);
+    try {
+      setCreatedTrip(await startSafeTrip(createdTrip.id));
+    } catch (startError) {
+      setTripError(startError instanceof Error ? startError.message : "The Safe Trip could not be started.");
+    } finally {
+      setIsStartingTrip(false);
+    }
+  }
+
+  function handleRecordCurrentLocation() {
+    if (!createdTrip || createdTrip.status !== "active" || isRecordingLocation) return;
+    if (!navigator.geolocation) {
+      setTripError("Location is not available in this browser.");
+      return;
+    }
+    setIsRecordingLocation(true);
+    setTripError(null);
+    setLocationUpdateMessage(null);
+    navigator.geolocation.getCurrentPosition(
+      ({ coords }) => {
+        void recordSafeTripLocation(
+          createdTrip.id,
+          coords.latitude,
+          coords.longitude,
+          new Date().toISOString(),
+        )
+          .then((location) => {
+            setLocationUpdateMessage(`Location update recorded at ${new Date(location.received_at).toLocaleTimeString()}.`);
+          })
+          .catch((locationError) => {
+            setTripError(locationError instanceof Error ? locationError.message : "The location update could not be recorded.");
+          })
+          .finally(() => setIsRecordingLocation(false));
+      },
+      (positionError) => {
+        setIsRecordingLocation(false);
+        setTripError(
+          positionError.code === 1
+            ? "Location permission was denied."
+            : "Your current location could not be determined.",
+        );
+      },
+      { enableHighAccuracy: false, timeout: 10000, maximumAge: 30000 },
+    );
   }
 
   return (
@@ -349,7 +403,12 @@ export default function HomePage() {
                       </button>
                     </div>
                     {tripError && <p role="alert" className="mt-2 text-xs text-rose-700">{tripError}</p>}
-                    {createdTrip && <p role="status" className="mt-2 text-xs text-emerald-700">Safe Trip plan created for {new Date(createdTrip.expected_arrival_at).toLocaleString()}. Monitoring has not started.</p>}
+                    {createdTrip && <div className="mt-2 flex flex-wrap items-center justify-between gap-2 text-xs text-emerald-700">
+                      <p role="status">Safe Trip is {createdTrip.status}. Expected arrival: {new Date(createdTrip.expected_arrival_at).toLocaleString()}{createdTrip.started_at ? ` Started at ${new Date(createdTrip.started_at).toLocaleString()}.` : ""}</p>
+                      {createdTrip.status === "planned" && <button type="button" onClick={() => void handleStartSafeTrip()} disabled={isStartingTrip} className="rounded-lg bg-emerald-600 px-3 py-2 font-semibold text-white disabled:cursor-wait disabled:opacity-50">{isStartingTrip ? "Starting…" : "Start Trip"}</button>}
+                      {createdTrip.status === "active" && <button type="button" onClick={handleRecordCurrentLocation} disabled={isRecordingLocation} className="rounded-lg bg-indigo-600 px-3 py-2 font-semibold text-white disabled:cursor-wait disabled:opacity-50">{isRecordingLocation ? "Recording…" : "Record current location"}</button>}
+                    </div>}
+                    {locationUpdateMessage && <p role="status" className="mt-2 text-xs text-emerald-700">{locationUpdateMessage}</p>}
                   </div>
                 </div>
               )}

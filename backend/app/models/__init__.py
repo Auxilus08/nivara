@@ -8,7 +8,7 @@ from app.models.incident import (
     IncidentSource,
     IncidentStatus,
 )
-from app.models.trip import SafeTrip, SafeTripStatus
+from app.models.trip import SafeTrip, SafeTripLocation, SafeTripStatus
 
 __all__ = [
     "ConfidenceLevel",
@@ -18,5 +18,6 @@ __all__ = [
     "IncidentSource",
     "IncidentStatus",
     "SafeTrip",
+    "SafeTripLocation",
     "SafeTripStatus",
 ]

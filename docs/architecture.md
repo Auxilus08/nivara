@@ -361,10 +361,15 @@ Check-in / assistance
     ->
 Trip completion
 
-T103 currently implements only the persisted plan boundary: the selected route
-is stored as a provider-neutral snapshot with a future expected arrival and
-`planned` status. Monitoring and subsequent lifecycle transitions are not part
-of this slice.
+T103 stores the selected route as a provider-neutral snapshot with a future
+expected arrival and `planned` status. T052 adds the first lifecycle
+transition: `planned -> active`, with a server-generated timezone-aware
+`started_at` timestamp. The route snapshot and expected arrival are immutable
+through this transition. T053 stores each active-trip location update in the
+separate `safe_trip_locations` PostGIS-backed table. It preserves the device
+`recorded_at` and server `received_at` timestamps and does not calculate route
+deviation, safety, or trip state. Location history retrieval, deviation
+analysis, check-ins, completion, and history remain later tasks.
 
 ---
 

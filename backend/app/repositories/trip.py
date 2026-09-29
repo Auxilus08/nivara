@@ -19,3 +19,8 @@ class SafeTripRepository:
     async def get_by_id(self, trip_id: UUID) -> SafeTrip | None:
         return await self.session.get(SafeTrip, trip_id)
 
+    async def update(self, trip: SafeTrip) -> SafeTrip:
+        await self.session.flush()
+        await self.session.commit()
+        await self.session.refresh(trip)
+        return trip
