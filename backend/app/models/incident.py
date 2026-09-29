@@ -45,6 +45,12 @@ class ConfidenceLevel(StrEnum):
     HIGHER_CONFIDENCE = "higher_confidence"
 
 
+def _enum_values(enum_type: type[StrEnum]) -> list[str]:
+    """Persist the stable string values used by the database enum types."""
+
+    return [member.value for member in enum_type]
+
+
 class Incident(Base):
     __tablename__ = "incidents"
     __table_args__ = (
@@ -55,7 +61,14 @@ class Incident(Base):
 
     id: Mapped[UUID] = mapped_column(PGUUID(as_uuid=True), primary_key=True, default=uuid4)
     category: Mapped[IncidentCategory] = mapped_column(
-        ENUM(IncidentCategory, name="incident_category", create_type=False), nullable=False, index=True
+        ENUM(
+            IncidentCategory,
+            name="incident_category",
+            create_type=False,
+            values_callable=_enum_values,
+        ),
+        nullable=False,
+        index=True,
     )
     description: Mapped[str] = mapped_column(Text, nullable=False)
     latitude: Mapped[float] = mapped_column(nullable=False)
@@ -68,17 +81,45 @@ class Incident(Base):
         DateTime(timezone=True), nullable=False, server_default=func.now(), index=True
     )
     severity: Mapped[IncidentSeverity] = mapped_column(
-        ENUM(IncidentSeverity, name="incident_severity", create_type=False), nullable=False, index=True
+        ENUM(
+            IncidentSeverity,
+            name="incident_severity",
+            create_type=False,
+            values_callable=_enum_values,
+        ),
+        nullable=False,
+        index=True,
     )
     source: Mapped[IncidentSource] = mapped_column(
-        ENUM(IncidentSource, name="incident_source", create_type=False), nullable=False, index=True
+        ENUM(
+            IncidentSource,
+            name="incident_source",
+            create_type=False,
+            values_callable=_enum_values,
+        ),
+        nullable=False,
+        index=True,
     )
     confidence_level: Mapped[ConfidenceLevel] = mapped_column(
-        ENUM(ConfidenceLevel, name="confidence_level", create_type=False), nullable=False, index=True
+        ENUM(
+            ConfidenceLevel,
+            name="confidence_level",
+            create_type=False,
+            values_callable=_enum_values,
+        ),
+        nullable=False,
+        index=True,
     )
     corroboration_count: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
     status: Mapped[IncidentStatus] = mapped_column(
-        ENUM(IncidentStatus, name="incident_status", create_type=False), nullable=False, index=True
+        ENUM(
+            IncidentStatus,
+            name="incident_status",
+            create_type=False,
+            values_callable=_enum_values,
+        ),
+        nullable=False,
+        index=True,
     )
     confidence_factors: Mapped[list[str]] = mapped_column(JSONB, nullable=False, default=list)
     created_at: Mapped[datetime] = mapped_column(

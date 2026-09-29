@@ -83,6 +83,11 @@ The frontend foundation uses the Next.js App Router. Shared UI primitives live
 under `frontend/components/ui`, API configuration under `frontend/lib`, and
 feature UI should be added without placing domain logic in `app/page.tsx`.
 
+For a local hackathon walkthrough, `NIVARA_DEMO_MODE=true` switches database
+repositories and routing/geocoding to deterministic in-memory adapters. This
+keeps the full UI flow runnable without PostgreSQL/PostGIS or network access;
+live mode remains the default and uses the configured services.
+
 ---
 
 ## 4. Backend Layering

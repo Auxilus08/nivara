@@ -9,7 +9,10 @@ engine = create_async_engine(settings.database_url, pool_pre_ping=True)
 SessionFactory = async_sessionmaker(engine, expire_on_commit=False)
 
 
-async def get_db_session() -> AsyncIterator[AsyncSession]:
+async def get_db_session() -> AsyncIterator[AsyncSession | None]:
     """Yield a request-scoped session for future repository dependencies."""
+    if settings.demo_mode:
+        yield None
+        return
     async with SessionFactory() as session:
         yield session

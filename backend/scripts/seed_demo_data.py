@@ -216,7 +216,7 @@ def main() -> None:
         asyncio.run(_run())
     except Exception as exc:
         raise SystemExit(
-            "Demo seed failed; verify that PostgreSQL/PostGIS is running and the migration chain is current."
+            f"Demo seed failed: {exc}. Verify that PostgreSQL/PostGIS is running and the migration chain is current."
         ) from exc
 
 

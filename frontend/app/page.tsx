@@ -1,7 +1,7 @@
 "use client";
 
 import dynamic from "next/dynamic";
-import { FormEvent, useState } from "react";
+import { FormEvent, useEffect, useState } from "react";
 import { ShieldCheck } from "lucide-react";
 
 import { Card, CardContent } from "@/components/ui/card";
@@ -97,12 +97,13 @@ export default function HomePage() {
   const [heatmap, setHeatmap] = useState<HeatmapResponse | null>(null);
   const [isLoadingHeatmap, setIsLoadingHeatmap] = useState(false);
   const [heatmapError, setHeatmapError] = useState<string | null>(null);
-  const [expectedArrival, setExpectedArrival] = useState(() => {
+  const [expectedArrival, setExpectedArrival] = useState("");
+  useEffect(() => {
     const value = new Date(Date.now() + 60 * 60 * 1000);
     value.setSeconds(0, 0);
     const offset = value.getTimezoneOffset();
-    return new Date(value.getTime() - offset * 60 * 1000).toISOString().slice(0, 16);
-  });
+    setExpectedArrival(new Date(value.getTime() - offset * 60 * 1000).toISOString().slice(0, 16));
+  }, []);
   const [createdTrip, setCreatedTrip] = useState<SafeTrip | null>(null);
   const [isCreatingTrip, setIsCreatingTrip] = useState(false);
   const [tripError, setTripError] = useState<string | null>(null);
@@ -881,7 +882,7 @@ export default function HomePage() {
                         Expected arrival
                         <input id="expected-arrival" type="datetime-local" value={expectedArrival} onChange={(event) => { setExpectedArrival(event.target.value); setTripError(null); }} disabled={isCreatingTrip} className="mt-1 block w-full rounded-lg border border-slate-200 bg-white px-2.5 py-2 text-sm font-normal text-slate-700" />
                       </label>
-                      <button type="button" onClick={() => void handleCreateSafeTrip()} disabled={isCreatingTrip || !selectedRoute.geometry} className="rounded-lg bg-indigo-600 px-3 py-2 text-sm font-semibold text-white disabled:cursor-not-allowed disabled:opacity-50">
+                      <button type="button" onClick={() => void handleCreateSafeTrip()} disabled={isCreatingTrip || !expectedArrival || !selectedRoute.geometry} className="rounded-lg bg-indigo-600 px-3 py-2 text-sm font-semibold text-white disabled:cursor-not-allowed disabled:opacity-50">
                         {isCreatingTrip ? "Creating…" : "Create Safe Trip"}
                       </button>
                     </div>

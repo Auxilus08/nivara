@@ -15,12 +15,15 @@ from app.providers.routing import (
 )
 from app.schemas.routes import DestinationSearchResponse
 from app.services.geocoding import GeocodingService
+from app.demo import DemoGeocodingProvider
 
 router = APIRouter(prefix="/api/v1/geocoding", tags=["geocoding"])
 
 
 async def get_geocoding_service() -> GeocodingService:
     settings = get_settings()
+    if settings.demo_mode:
+        return GeocodingService(DemoGeocodingProvider())
     if settings.routing_provider.lower() == "openrouteservice":
         return GeocodingService(OpenRouteServiceProvider(settings.routing_api_key))
     return GeocodingService(

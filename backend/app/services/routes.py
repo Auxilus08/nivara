@@ -65,13 +65,28 @@ class RoutingService:
             raise RoutingProviderError("External routing provider returned invalid route data") from exc
 
     def _normalize_route(self, request: RouteRequest, route: ProviderRoute) -> RouteCandidate:
+        geometry = route.geometry
+        if geometry is not None and len(geometry.coordinates) >= 2:
+            # Providers commonly return snapped coordinates a few metres from
+            # the requested points. Keep their intermediate geometry, but make
+            # the route contract composable with Safe Trip's exact endpoint
+            # validation.
+            geometry = geometry.model_copy(
+                update={
+                    "coordinates": [
+                        request.origin,
+                        *geometry.coordinates[1:-1],
+                        request.destination,
+                    ]
+                }
+            )
         return RouteCandidate(
             route_id=f"{self.provider.name}:{route.provider_route_id}",
             origin=request.origin,
             destination=request.destination,
             distance_meters=route.distance_meters,
             estimated_duration_seconds=route.estimated_duration_seconds,
-            geometry=route.geometry,
+            geometry=geometry,
             provider=self.provider.name,
             provider_metadata=route.metadata,
         )

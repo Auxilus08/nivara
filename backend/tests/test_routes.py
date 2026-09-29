@@ -277,6 +277,7 @@ async def test_openrouteservice_success_normalizes_geojson_and_preserves_coordin
 
     assert captured["url"] == "https://routing.example.test/v2/directions/driving-car/geojson"
     assert captured["json"]["coordinates"] == [[77.5946, 12.9716], [77.6245, 12.9352]]
+    assert captured["json"]["radiuses"] == [-1, 5000]
     assert captured["headers"]["Authorization"] == "test-secret"
     assert routes[0].distance_meters == 4200.5
     assert routes[0].estimated_duration_seconds == 901

@@ -1,8 +1,7 @@
 from collections.abc import Sequence
 from uuid import UUID
 
-from geoalchemy2 import Geography
-from sqlalchemy import cast, func, select
+from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.trip import SafeTripLocation
@@ -45,12 +44,10 @@ class SafeTripLocationRepository:
             f"{coordinate.longitude} {coordinate.latitude}" for coordinate in coordinates
         ) + ")"
         route_line = func.ST_GeomFromText(line_wkt, 4326)
-        statement = select(
-            func.ST_Distance(
-                cast(location.location, Geography),
-                cast(route_line, Geography),
-            )
-        )
+        # ST_DistanceSphere accepts the stored geometry directly and returns
+        # metres. Casting a GeoAlchemy WKBElement to Geography through
+        # asyncpg can make PostgreSQL parse the bound WKB bytes as WKT.
+        statement = select(func.ST_DistanceSphere(location.location, route_line))
         result = await self.session.execute(statement)
         distance = result.scalar_one()
         return float(distance)

@@ -12,51 +12,62 @@ from app.repositories.trusted_contact import (
     TrustedContactSharingPreferenceRepository,
 )
 from app.repositories.trip_trusted_contact import SafeTripTrustedContactRepository
+from app.core.config import get_settings
+from app.demo import (
+    DemoAssociationRepository,
+    DemoCheckInRepository,
+    DemoContactRepository,
+    DemoEmergencyRepository,
+    DemoIncidentRepository,
+    DemoLocationRepository,
+    DemoPreferenceRepository,
+    DemoSafeTripRepository,
+)
 
 
 async def get_incident_repository(
-    session: AsyncSession = Depends(get_db_session),
-) -> IncidentRepository:
-    return IncidentRepository(session)
+    session: AsyncSession | None = Depends(get_db_session),
+) -> IncidentRepository | DemoIncidentRepository:
+    return DemoIncidentRepository() if get_settings().demo_mode else IncidentRepository(session)
 
 
 async def get_emergency_repository(
-    session: AsyncSession = Depends(get_db_session),
-) -> EmergencyRepository:
-    return EmergencyRepository(session)
+    session: AsyncSession | None = Depends(get_db_session),
+) -> EmergencyRepository | DemoEmergencyRepository:
+    return DemoEmergencyRepository() if get_settings().demo_mode else EmergencyRepository(session)
 
 
 async def get_safe_trip_repository(
-    session: AsyncSession = Depends(get_db_session),
-) -> SafeTripRepository:
-    return SafeTripRepository(session)
+    session: AsyncSession | None = Depends(get_db_session),
+) -> SafeTripRepository | DemoSafeTripRepository:
+    return DemoSafeTripRepository() if get_settings().demo_mode else SafeTripRepository(session)
 
 
 async def get_safe_trip_location_repository(
-    session: AsyncSession = Depends(get_db_session),
-) -> SafeTripLocationRepository:
-    return SafeTripLocationRepository(session)
+    session: AsyncSession | None = Depends(get_db_session),
+) -> SafeTripLocationRepository | DemoLocationRepository:
+    return DemoLocationRepository() if get_settings().demo_mode else SafeTripLocationRepository(session)
 
 
 async def get_safe_trip_check_in_repository(
-    session: AsyncSession = Depends(get_db_session),
-) -> SafeTripCheckInRepository:
-    return SafeTripCheckInRepository(session)
+    session: AsyncSession | None = Depends(get_db_session),
+) -> SafeTripCheckInRepository | DemoCheckInRepository:
+    return DemoCheckInRepository() if get_settings().demo_mode else SafeTripCheckInRepository(session)
 
 
 async def get_trusted_contact_repository(
-    session: AsyncSession = Depends(get_db_session),
-) -> TrustedContactRepository:
-    return TrustedContactRepository(session)
+    session: AsyncSession | None = Depends(get_db_session),
+) -> TrustedContactRepository | DemoContactRepository:
+    return DemoContactRepository() if get_settings().demo_mode else TrustedContactRepository(session)
 
 
 async def get_trusted_contact_sharing_preference_repository(
-    session: AsyncSession = Depends(get_db_session),
-) -> TrustedContactSharingPreferenceRepository:
-    return TrustedContactSharingPreferenceRepository(session)
+    session: AsyncSession | None = Depends(get_db_session),
+) -> TrustedContactSharingPreferenceRepository | DemoPreferenceRepository:
+    return DemoPreferenceRepository() if get_settings().demo_mode else TrustedContactSharingPreferenceRepository(session)
 
 
 async def get_safe_trip_trusted_contact_repository(
-    session: AsyncSession = Depends(get_db_session),
-) -> SafeTripTrustedContactRepository:
-    return SafeTripTrustedContactRepository(session)
+    session: AsyncSession | None = Depends(get_db_session),
+) -> SafeTripTrustedContactRepository | DemoAssociationRepository:
+    return DemoAssociationRepository() if get_settings().demo_mode else SafeTripTrustedContactRepository(session)

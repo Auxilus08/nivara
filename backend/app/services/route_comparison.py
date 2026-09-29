@@ -30,6 +30,7 @@ NO_SAFETY_CONTEXT_EXPLANATION = (
     "Incident-derived safety indicators were unavailable for all candidates; "
     "selection used normalized travel time only."
 )
+SAFETY_PRIORITY_TIE_COST_DELTA = 2.0
 
 
 class RouteComparisonService:
@@ -77,4 +78,31 @@ class RouteComparisonService:
             enriched,
             key=lambda route: (route.comparison_cost or 0.0, route.estimated_duration_seconds, route.route_id),
         )
+
+        # Provider alternatives can share the same incident corridor and
+        # therefore receive the same contextual risk estimate. For Safety
+        # Priority, when that risk is tied and the weighted costs are close,
+        # prefer the shorter physical route so the mode remains meaningfully
+        # differentiated without fabricating a safety signal. Exact cost ties
+        # retain the normal duration/id ordering for backwards compatibility.
+        if mode == RouteMode.SAFETY_PRIORITY and has_complete_safety:
+            selected_risk = selected.safety_assessment.risk_score  # type: ignore[union-attr]
+            close_same_risk = [
+                route
+                for route in enriched
+                if route.safety_assessment is not None
+                and route.safety_assessment.risk_score == selected_risk
+                and (route.comparison_cost or 0.0) > (selected.comparison_cost or 0.0)
+                and (route.comparison_cost or 0.0) - (selected.comparison_cost or 0.0)
+                <= SAFETY_PRIORITY_TIE_COST_DELTA
+            ]
+            if close_same_risk:
+                selected = min(
+                    [selected, *close_same_risk],
+                    key=lambda route: (
+                        route.distance_meters,
+                        route.estimated_duration_seconds,
+                        route.route_id,
+                    ),
+                )
         return enriched, selected.route_id

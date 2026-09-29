@@ -157,6 +157,10 @@ class OpenRouteServiceProvider:
                 [request.origin.longitude, request.origin.latitude],
                 [request.destination.longitude, request.destination.latitude],
             ],
+            # Geocoders often return a place centroid (for example an airport
+            # terminal or campus), not a point on a road. Allow ORS to snap
+            # the destination to the nearest routable road within 5 km.
+            "radiuses": [-1, 5000],
             "instructions": False,
             "alternative_routes": {
                 "target_count": 3,

@@ -16,6 +16,16 @@ depends_on: Union[str, Sequence[str], None] = None
 
 
 def upgrade() -> None:
+    # Alembic creates this column as VARCHAR(32) by default, but this
+    # revision identifier is longer than 32 characters. Widen it before
+    # Alembic records the revision at the end of this migration.
+    op.alter_column(
+        "alembic_version",
+        "version_num",
+        existing_type=sa.String(length=32),
+        type_=sa.String(length=128),
+        existing_nullable=False,
+    )
     op.create_table(
         "safe_trip_trusted_contacts",
         sa.Column("safe_trip_id", postgresql.UUID(as_uuid=True), nullable=False),
@@ -42,3 +52,10 @@ def downgrade() -> None:
         table_name="safe_trip_trusted_contacts",
     )
     op.drop_table("safe_trip_trusted_contacts")
+    op.alter_column(
+        "alembic_version",
+        "version_num",
+        existing_type=sa.String(length=128),
+        type_=sa.String(length=32),
+        existing_nullable=False,
+    )

@@ -34,6 +34,25 @@ Open `http://localhost:3000`. The backend API is expected at the configured
 not available, the UI shows an explicit unavailable/configuration error; it
 does not fabricate route success.
 
+For a database/provider-independent local walkthrough, use the deterministic
+demo backend instead:
+
+```bash
+cd ~/projects/nivara
+NIVARA_DEMO_MODE=true PYTHONPATH=backend uvicorn app.main:app --reload --port 8001
+```
+
+Then start the frontend with:
+
+```bash
+cd ~/projects/nivara/frontend
+NEXT_PUBLIC_API_URL=http://localhost:8001/api/v1 pnpm dev
+```
+
+Demo mode keeps data in memory for the running process and uses synthetic route,
+geocoding, incident, and resource data. It is for the hackathon walkthrough,
+not production deployment.
+
 If the database is available and migrations are current, seed the synthetic
 incident dataset once:
 

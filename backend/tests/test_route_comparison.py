@@ -259,6 +259,20 @@ def test_safety_priority_equal_cost_uses_lower_duration_then_route_id():
     assert selected_by_id == "route-a"
 
 
+def test_safety_priority_close_tied_risk_prefers_shorter_physical_route():
+    assessment = manual_assessment(50)
+    faster = candidate("faster", 100, assessment).model_copy(update={"distance_meters": 2500})
+    shorter_physical = candidate("shorter-physical", 101, assessment).model_copy(
+        update={"distance_meters": 2000}
+    )
+
+    _, selected = RouteComparisonService().compare(
+        [faster, shorter_physical], RouteMode.SAFETY_PRIORITY
+    )
+
+    assert selected == "shorter-physical"
+
+
 def test_safety_priority_single_candidate_keeps_assessment_attached():
     assessment = manual_assessment(68)
 

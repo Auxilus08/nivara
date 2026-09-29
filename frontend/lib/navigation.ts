@@ -72,17 +72,27 @@ export async function calculateRoutes(
   destination: Coordinate,
   mode: RouteMode,
 ): Promise<RouteResponse> {
-  let response: Response;
-  try {
-    response = await fetch(`${apiConfig.baseUrl}/routes`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ origin, destination, mode }),
-    });
-  } catch {
-    throw new NavigationApiError("The navigation service could not be reached.", 0);
+  let response: Response | undefined;
+  for (let attempt = 0; attempt < 2; attempt += 1) {
+    try {
+      response = await fetch(`${apiConfig.baseUrl}/routes`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ origin, destination, mode }),
+      });
+    } catch {
+      throw new NavigationApiError("The navigation service could not be reached.", 0);
+    }
+
+    if (response.ok || response.status < 500 || attempt === 1) {
+      break;
+    }
+    await new Promise((resolve) => setTimeout(resolve, 400));
   }
 
+  if (!response) {
+    throw new NavigationApiError("The navigation service could not be reached.", 0);
+  }
   if (!response.ok) {
     const body = (await response.json().catch(() => null)) as
       | { detail?: { message?: string } }

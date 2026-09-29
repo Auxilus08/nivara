@@ -14,14 +14,21 @@ from app.repositories.incident import IncidentRepository
 from app.schemas.routes import RouteRequest, RouteResponse
 from app.services.incidents import IncidentService
 from app.services.routes import RoutingService
+from app.demo import DemoIncidentRepository, DemoRoutingProvider
 
 router = APIRouter(prefix="/api/v1/routes", tags=["routes"])
 
 
 async def get_routing_service(
-    session: AsyncSession = Depends(get_db_session),
+    session: AsyncSession | None = Depends(get_db_session),
 ) -> RoutingService:
     settings = get_settings()
+    if settings.demo_mode:
+        return RoutingService(
+            DemoRoutingProvider(),
+            context_provider=IncidentService(DemoIncidentRepository()),
+            corridor_radius_meters=settings.route_corridor_radius_meters,
+        )
     context_provider = IncidentService(IncidentRepository(session))
     if settings.routing_provider.lower() == "openrouteservice":
         return RoutingService(
